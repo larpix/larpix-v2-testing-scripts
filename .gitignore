@@ -1,0 +1,4 @@
+datalog*
+__pycache__*
+*.pyc
+*.h5
