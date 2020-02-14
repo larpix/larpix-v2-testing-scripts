@@ -2,7 +2,7 @@ import larpix
 import larpix.io
 import larpix.logger
 
-def main(logger=False):
+def main(logger=False, soft_reset=True):
     # create controller
     c = larpix.Controller()
     c.io = larpix.io.SerialPort()
@@ -11,11 +11,11 @@ def main(logger=False):
 
     c.add_chip('1-1-1')
 
-    # issue soft reset
-    c['1-1-1'].config.load_config_defaults = 1
-    c.write_configuration('1-1-1',[123])
-    c['1-1-1'].config.load_config_defaults = 0
-    c.write_configuration('1-1-1',[123])
+    if soft_reset:
+        c['1-1-1'].config.load_config_defaults = 1
+        c.write_configuration('1-1-1',[123])
+        c['1-1-1'].config.load_config_defaults = 0
+        c.write_configuration('1-1-1',[123])
 
     # set configuration
     c['1-1-1'].config.enable_miso_upstream[0] = 1
