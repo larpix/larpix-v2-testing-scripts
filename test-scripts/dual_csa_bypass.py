@@ -5,10 +5,13 @@ import larpix.logger
 import base
 
 def main(channel0=0, channel1=1, runtime=12):
+    print('dual csa bypass')
+
     # create controller
     c = base.main(logger=True)
 
     # set configuration
+    print('channels',channel0,channel1)
     c['1-1-1'].config.external_trigger_mask[channel0] = 0
     c['1-1-1'].config.external_trigger_mask[channel1] = 0
     c['1-1-1'].config.channel_mask[channel0] = 0

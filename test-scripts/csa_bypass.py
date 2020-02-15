@@ -5,10 +5,13 @@ import larpix.logger
 import base
 
 def main(channel=0, runtime=12):
+    print('csa bypass')
+
     # create controller
     c = base.main(logger=True)
 
     # set configuration
+    print('channel',channel)
     c['1-1-1'].config.external_trigger_mask[channel] = 0
     c['1-1-1'].config.channel_mask[channel] = 0
     c['1-1-1'].config.enable_hit_veto = 0

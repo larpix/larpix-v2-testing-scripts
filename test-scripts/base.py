@@ -3,15 +3,20 @@ import larpix.io
 import larpix.logger
 
 def main(logger=False, soft_reset=True):
+    print('base config')
+
     # create controller
     c = larpix.Controller()
     c.io = larpix.io.SerialPort()
     if logger:
+        print('logger')
         c.logger = larpix.logger.HDF5Logger(version='2.0')
+        print('filename:',c.logger.filename)
 
     c.add_chip('1-1-1')
 
     if soft_reset:
+        print('soft reset')
         c['1-1-1'].config.load_config_defaults = 1
         c.write_configuration('1-1-1',[123])
         c['1-1-1'].config.load_config_defaults = 0
