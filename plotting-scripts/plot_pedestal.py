@@ -11,27 +11,31 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sys
 
-def plot_adc_dist(data, channel):
-    plt.figure('adc dist channel {}'.format(channel))
-    plt.hist(data[channel]['adc'], bins=range(0,256), alpha=.5)
+def plot_adc_dist(data, channel, name=None):
+    if name is None:
+        plt.figure('adc dist channel {}'.format(channel))
+    plt.hist(data[channel]['adc'], bins=range(0,256), histtype='step')
     plt.xlabel('ADC')
     plt.ylabel('trigger count')
-    plt.grid(True)
     plt.legend(['channel {}'.format(channel)])
 
-def plot_adc_mean(data, bins=25):
+def plot_adc_mean(data, bins=50):
     plt.figure('mean adc')
-    plt.hist([data[channel]['mean'] for channel in data.keys()], bins=bins, alpha=.5)
+    plt.hist([data[channel]['mean'] for channel in data.keys()], bins=bins, histtype='step')
     plt.xlabel('mean ADC')
     plt.ylabel('channel count')
-    plt.grid(True)
 
-def plot_adc_std(data, bins=25):
+def plot_adc_std(data, bins=50):
     plt.figure('std adc')
-    plt.hist([data[channel]['std'] for channel in data.keys()], bins=bins, alpha=.5)
+    plt.hist([data[channel]['std'] for channel in data.keys()], bins=bins, histtype='step')
     plt.xlabel('std dev ADC')
     plt.ylabel('channel count')
-    plt.grid(True)
+
+def scatter_adc_std_mean(data):
+    plt.figure('scatter adc mean/std')
+    plt.scatter([data[channel]['mean'] for channel in data.keys()], [data[channel]['std'] for channel in data.keys()],1)
+    plt.xlabel('mean ADC')
+    plt.ylabel('std dev ADC')
 
 def main(*args):
     filename = args[0]
@@ -66,5 +70,6 @@ def main(*args):
 if __name__ == '__main__':
     data = main(*sys.argv[1:])
     plot_adc_dist(data, 0)
-    plot_adc_mean(data, bins=np.linspace(0,50,25))
-    plot_adc_std(data, bins=np.linspace(0,10,25))
+    plot_adc_mean(data, bins=np.linspace(0,50,50))
+    plot_adc_std(data, bins=np.linspace(0,10,50))
+    scatter_adc_std_mean(data)
