@@ -103,3 +103,6 @@ def main(channels=range(0,64,1), threshold_global_start=40, pixel_trim_dac_start
     c['1-1-1'].config.write(filename, force=True)
 
     return c
+
+if __name__ == '__main__':
+    c = main()
