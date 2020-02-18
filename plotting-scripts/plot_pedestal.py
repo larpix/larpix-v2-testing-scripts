@@ -14,6 +14,8 @@ import sys
 def plot_adc_dist(data, channel, name=None):
     if name is None:
         plt.figure('adc dist channel {}'.format(channel))
+    else:
+        plt.figure(name)
     plt.hist(data[channel]['adc'], bins=range(0,256), histtype='step')
     plt.xlabel('ADC')
     plt.ylabel('trigger count')
