@@ -9,7 +9,7 @@ def main(channels=range(0,64,1), threshold_global_start=40, pixel_trim_dac_start
     print('configure thresholds')
 
     # create controller
-    c = base_warm.main(*args, **kwargs)
+    c = base_warm.main()
 
     # set initial configuration
     print('channels',channels)
