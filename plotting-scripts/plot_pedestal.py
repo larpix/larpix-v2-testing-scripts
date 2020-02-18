@@ -1,3 +1,11 @@
+'''
+Plots mean and std of pedestal adc distributions
+
+Usage:
+  python3 -i plot_pedestal.py <filename>
+
+'''
+
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,7 +34,7 @@ def plot_adc_std(data, bins=25):
     plt.grid(True)
 
 def main(*args):
-    filename = args[1]
+    filename = args[0]
 
     print('opening',filename)
 
@@ -56,7 +64,7 @@ def main(*args):
     return data
 
 if __name__ == '__main__':
-    data = main(*sys.argv)
+    data = main(*sys.argv[1:])
     plot_adc_dist(data, 0)
     plot_adc_mean(data, bins=np.linspace(0,50,25))
     plot_adc_std(data, bins=np.linspace(0,10,25))

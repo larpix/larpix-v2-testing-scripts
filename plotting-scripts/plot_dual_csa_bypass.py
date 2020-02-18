@@ -1,9 +1,16 @@
+'''
+Plots ADC vs. timestamp, ADC vs. packet index, and timestamp vs. packet index
+
+Usage:
+  python3 -i plot_dual_csa_bypass.py <filename>
+
+'''
 import h5py
 import matplotlib.pyplot as plt
 import sys
 
 def main(*args):
-    filename = args[1]
+    filename = args[0]
     print('opening',filename)
 
     plt.ion()
@@ -60,4 +67,4 @@ def main(*args):
     return f
 
 if __name__ == '__main__':
-    f = main(*sys.argv)
+    f = main(*sys.argv[1:])
