@@ -102,6 +102,7 @@ def main(channels=range(0,64,1), threshold_global_start=40, pixel_trim_dac_start
     time_format = '%Y_%m_%d_%H_%M_%S_%Z'
     config_filename = 'config-'+time.strftime(time_format)+'.json'
     c['1-1-1'].config.write(filename, force=True)
+    print('saved to',config_filename)
 
     return c
 
