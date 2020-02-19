@@ -82,9 +82,9 @@ def main(channels=range(0,64,1), threshold_global_start=40, pixel_trim_dac_start
 
         # back off channels that have rates above target
         channel_triggers = c.reads[-1].extract('channel_id')
+        rates = dict([(channel, len([ch for ch in channel_triggers if ch == channel])/runtime) for channel in channels_to_set])
         for channel in channels_to_set:
-            rate = len([ch for ch in channel_triggers if ch == channel])/runtime
-            if rate > target_rate:
+            if rates[channel] > target_rate:
                 # back off by 1
                 c['1-1-1'].config.pixel_trim_dac[channel] = trim+1
                 if channel in channels_to_set:
@@ -92,8 +92,9 @@ def main(channels=range(0,64,1), threshold_global_start=40, pixel_trim_dac_start
         registers = list(range(0,64))
         c.write_configuration('1-1-1', registers)
 
-        # walk down trim
-        trim -= 1
+        # walk down trim if no channels above rate
+        if none([rate > target_rate for rate in rates]):
+            trim -= 1
 
     c.run(1,'flush stale data')
 
