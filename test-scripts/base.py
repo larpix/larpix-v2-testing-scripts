@@ -20,7 +20,7 @@ def set_uart_clk_ctrl(controller, chip_key, clk_ctrl):
         1: 4,
         2: 8,
         3: 16}
-    c.set_larpix_uart_clk_ratio(clk_ctrl_2_clk_ratio_map[clk_ctrl])
+    controller.io.set_larpix_uart_clk_ratio(clk_ctrl_2_clk_ratio_map[clk_ctrl])
 
 def main(logger=False, reset=True):
     print('base config')
@@ -28,6 +28,7 @@ def main(logger=False, reset=True):
     # create controller
     c = larpix.Controller()
     c.io = larpix.io.SerialPort()
+    c.io.set_larpix_uart_clk_ratio(2)
     if logger:
         print('logger')
         c.logger = larpix.logger.HDF5Logger(version='2.0')
