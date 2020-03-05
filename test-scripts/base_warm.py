@@ -11,24 +11,26 @@ def main(*args, **kwargs):
     c = base.main(*args, **kwargs)
 
     # set configuration
-    c['1-1-1'].config.ibias_buffer = 3
-    c['1-1-1'].config.ibias_tdac = 5
-    c['1-1-1'].config.ibias_comp = 5
-    c['1-1-1'].config.ibias_csa = 7
+    for chip_key, chip in c.chips.items():
+        chip.config.ibias_buffer = 3
+        chip.config.ibias_tdac = 5
+        chip.config.ibias_comp = 5
+        chip.config.ibias_csa = 7
 
-    c['1-1-1'].config.ref_current_trim = 15
+        chip.config.ref_current_trim = 15
 
-    c['1-1-1'].config.vref_dac = 185
-    c['1-1-1'].config.vcm_dac = 41
+        chip.config.vref_dac = 185
+        chip.config.vcm_dac = 41
 
-    # write configuration
-    registers = [74, 75, 76, 77] # ibias
-    registers += [81] # ref current
-    registers += [82, 83] # vXX_dac
-    c.write_configuration('1-1-1',registers)
+        # write configuration
+        registers = [74, 75, 76, 77] # ibias
+        registers += [81] # ref current
+        registers += [82, 83] # vXX_dac
+
+        c.write_configuration(chip_key, registers)
 
     # verify
-    ok, diff = c.verify_configuration('1-1-1')
+    ok, diff = c.verify_configuration()
     if not ok:
         print('config error',diff)
 
