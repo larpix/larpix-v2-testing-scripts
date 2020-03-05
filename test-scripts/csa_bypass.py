@@ -1,14 +1,16 @@
+import sys
+
 import larpix
 import larpix.io
 import larpix.logger
 
 import base
 
-def main(channel=0, runtime=12):
+def main(controller_config=None, channel=0, runtime=12):
     print('csa bypass')
 
     # create controller
-    c = base.main(logger=True)
+    c = base.main(controller_config_file=controller_config, logger=True)
 
     # set configuration
     print('channel',channel)
@@ -19,8 +21,17 @@ def main(channel=0, runtime=12):
         chip.config.csa_bypass_enable = 1
         chip.config.csa_bypass_select[channel] = 1
 
-        # write and verify
-        c.write_configuration(chip_key)
+        registers = list()
+        registers += chip.config.register_map['external_trigger_mask']
+        registers += chip.config.register_map['channel_mask']
+        registers += chip.config.register_map['enable_hit_veto']
+        registers += chip.config.register_map['csa_bypass_enable']
+        registers += chip.config.register_map['csa_bypass_select']
+
+        # write
+        c.write_configuration(chip_key, registers)
+
+    # verify
     ok, diff = c.verify_configuration()
     if not ok:
         print('config error',diff)
@@ -42,4 +53,4 @@ def main(channel=0, runtime=12):
     return c
 
 if __name__ == '__main__':
-    c = main()
+    c = main(*sys.argv[1:])
