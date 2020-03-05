@@ -12,15 +12,16 @@ def main(channel=0, runtime=12):
 
     # set configuration
     print('channel',channel)
-    c['1-1-1'].config.external_trigger_mask[channel] = 0
-    c['1-1-1'].config.channel_mask[channel] = 0
-    c['1-1-1'].config.enable_hit_veto = 0
-    c['1-1-1'].config.csa_bypass_enable = 1
-    c['1-1-1'].config.csa_bypass_select[channel] = 1
+    for chip_key, chip in c.chips.items():
+        chip.config.external_trigger_mask[channel] = 0
+        chip.config.channel_mask[channel] = 0
+        chip.config.enable_hit_veto = 0
+        chip.config.csa_bypass_enable = 1
+        chip.config.csa_bypass_select[channel] = 1
 
-    # write and verify
-    c.write_configuration('1-1-1')
-    ok, diff = c.verify_configuration('1-1-1')
+        # write and verify
+        c.write_configuration(chip_key)
+    ok, diff = c.verify_configuration()
     if not ok:
         print('config error',diff)
 
