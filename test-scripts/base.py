@@ -1,61 +1,79 @@
+import sys
+
 import larpix
 import larpix.io
 import larpix.logger
 
-def set_uart_clk_ctrl(controller, chip_key, clk_ctrl):
-    '''
-    Updates the uart clock speed for the system using the broadcast id
-
-    clk_ctrl:
-    0 = 2 clk cycles / bit
-    1 = 4 clk cycles / bit
-    2 = 8 clk cycles / bit
-    3 = 16 clk cycles / bit
-
-    '''
-    controller[chip_key].config.clk_ctrl = clk_ctrl
-    controller.write_configuration(chip_key, 123) # clk_ctrl reg
-    clk_ctrl_2_clk_ratio_map = {
+clk_ctrl_2_clk_ratio_map = {
         0: 2,
         1: 4,
         2: 8,
-        3: 16}
-    controller.io.set_larpix_uart_clk_ratio(clk_ctrl_2_clk_ratio_map[clk_ctrl])
+        3: 16
+        }
 
-def main(logger=False, reset=True):
+def main(controller_config_file=None, logger=False, reset=True):
     print('base config')
 
     # create controller
     c = larpix.Controller()
     c.io = larpix.io.SerialPort()
-    c.io.set_larpix_uart_clk_ratio(2)
     if logger:
         print('logger')
         c.logger = larpix.logger.HDF5Logger(version='2.0')
         print('filename:',c.logger.filename)
 
-    c.add_chip('1-1-1')
+    if controller_config_file is None:
+        c.add_chip('1-1-1')
+    else:
+        c.load(controller_config_file)
 
     if reset:
         # issues hard reset to larpix
         c.io.set_larpix_reset_cnt(128)
-        c.io.larpix_reset()
-        c.io.set_larpix_uart_clk_ratio(1)
+        c.io.reset()
+
+    # initialize network
+    for io_group, io_channels in c.network.items():
+        for io_channel in io_channels:
+            c.init_network(io_group, io_channel)
+            ok, diff = c.verify_network()
+            if not ok:
+                print('network'io_group,io_channel,'config error',diff)
+            else:
+                print('network',io_group,io_channel,'configured ok')
 
     # set uart speed
-    set_uart_clk_ctrl(c, '1-1-1', 1)
+    clk_ctrl = 1
+    for io_group, io_channels in c.network.items():
+        for io_channel in io_channels:
+            chip_keys = c.get_network_keys(io_group,io_channel,root_first_traversal=False)
+            for chip_key in chip_keys:
+                c[chip_key].config.clk_ctrl = clk_ctrl
+                c.write_configuration(chip_key, 'clk_ctrl')
+    c.io.set_larpix_uart_clk_ratio(clk_ctrl_2_clk_ratio_map[clk_ctrl])
 
-    # set configuration
-    c['1-1-1'].config.enable_miso_upstream[0] = 1
-    c['1-1-1'].config.enable_miso_downstream[0] = 1
+    # set other configuration registers
+    for chip_key in c.chips:
+        registers = []
+        register_map = c[chip_key].config.register_map
 
-    # write and verify
-    c.write_configuration('1-1-1',[124,125])
+        c[chip_key].config.csa_gain = 1
+        registers += list(register_map['csa_gain'])
+        c[chip_key].config.adc_hold_delay = 15
+        registers += list(register_map['adc_hold_delay'])
+        c[chip_key].config.enable_miso_differential = [1,1,1,1]
+        registers += list(register_map['enable_miso_differential'])
+
+        c.write_configuration(chip_key, registers)
+
+    # verify
     ok, diff = c.verify_configuration('1-1-1')
     if not ok:
         print('config error',diff)
+    else:
+        print('configured ok')
 
     return c
 
 if __name__ == '__main__':
-    c = main()
+    c = main(*sys.argv[1:])
