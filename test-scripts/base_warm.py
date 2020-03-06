@@ -1,3 +1,5 @@
+import sys
+
 import larpix
 import larpix.io
 import larpix.logger
@@ -28,13 +30,15 @@ def main(*args, **kwargs):
         registers += [82, 83] # vXX_dac
 
         c.write_configuration(chip_key, registers)
+        c.write_configuration(chip_key, registers)
 
     # verify
-    ok, diff = c.verify_configuration()
-    if not ok:
-        print('config error',diff)
+    for chip_key in c.chips:
+        ok, diff = c.verify_configuration(chip_key)
+        if not ok:
+            print('config error',diff)
 
     return c
 
 if __name__ == '__main__':
-    c = main()
+    c = main(*sys.argv[1:])
