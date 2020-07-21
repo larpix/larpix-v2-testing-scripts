@@ -42,7 +42,8 @@ class LArPixEVDFile(object):
             geo = larpixgeometry.layouts.load(geometry_file) # open geometry yaml file
             for chip, pixels in geo['chips']:
                 for channel, pixel_id in enumerate(pixels):
-                    self.geometry[(chip,channel)] = geo['pixels'][pixel_id][1:3]
+                    if pixel_id is not None:
+                        self.geometry[(chip,channel)] = geo['pixels'][pixel_id][1:3]
         self.pedestal = defaultdict(lambda: dict(
             pedestal_mv=550
             ))
