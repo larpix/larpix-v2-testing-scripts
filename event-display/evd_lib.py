@@ -49,15 +49,15 @@ class LArPixEVDFile(object):
             ))
         if pedestal_file is not None:
             with open(pedestal_file,'r') as infile:
-                for key,value in json.load(infile):
+                for key,value in json.load(infile).items():
                     self.pedestal[key] = value
         self.configuration = defaultdict(lambda: dict(
             vref_mv=1500,
             vcm_mv=550
             ))
         if configuration_file is not None:
-            with open(configuration,'r') as infile:
-                for key,value in json.load(infile):
+            with open(configuration_file,'r') as infile:
+                for key,value in json.load(infile).items():
                     self.configuration[key] = value
 
         self._queue  = queue.Queue()
@@ -161,9 +161,9 @@ class LArPixEVDFile(object):
                     + (event['io_channel'].astype(int)-1)*256*64 \
                     + (event['chip_id'].astype(int)*64) \
                     + (event['chip_id'].astype(int)*64)
-                vref = np.array([self.configuration[chip_key]['vref_mv'] for chip_key in hit_uniqueid//64])
-                vcm = np.array([self.configuration[chip_key]['vcm_mv'] for chip_key in hit_uniqueid//64])
-                ped = np.array([self.pedestal[unique_id]['pedestal_mv'] for unique_id in hit_uniqueid])
+                vref = np.array([self.configuration[str(unique_id)]['vref_mv'] for unique_id in hit_uniqueid])
+                vcm = np.array([self.configuration[str(unique_id)]['vcm_mv'] for unique_id in hit_uniqueid])
+                ped = np.array([self.pedestal[str(unique_id)]['pedestal_mv'] for unique_id in hit_uniqueid])
                 q = event['dataword']/256*(vref-vcm) + vcm - ped
                 hits_dict['q'] = q
 
