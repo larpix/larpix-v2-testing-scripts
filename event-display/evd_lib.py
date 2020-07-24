@@ -157,15 +157,15 @@ class LArPixEVDFile(object):
                 hits_dict['chipid']    = event['chip_id']
                 hits_dict['channelid'] = event['channel_id']
                 hits_dict['geom']      = np.zeros(len(event))
-                hit_uniqueid = (event['io_group'].astype(int)-1)*256*256*64 \
-                    + (event['io_channel'].astype(int)-1)*256*64 \
-                    + (event['chip_id'].astype(int)*64) \
-                    + (event['chip_id'].astype(int)*64)
+                hit_uniqueid = (((event['io_group'].astype(int))*256 \
+                            + event['io_channel'].astype(int))*256 \
+                        + event['chip_id'].astype(int))*64 \
+                    + event['channel_id'].astype(int)
                 vref = np.array([self.configuration[str(unique_id)]['vref_mv'] for unique_id in hit_uniqueid])
                 vcm = np.array([self.configuration[str(unique_id)]['vcm_mv'] for unique_id in hit_uniqueid])
                 ped = np.array([self.pedestal[str(unique_id)]['pedestal_mv'] for unique_id in hit_uniqueid])
-                q = event['dataword']/256*(vref-vcm) + vcm - ped
-                hits_dict['q'] = q
+                q = event['dataword']/256. * (vref-vcm) + vcm - ped
+                hits_dict['q'] = q.astype(int)
 
                 # calculate hit level info for tracks / events
                 q_sum = np.sum(q)
