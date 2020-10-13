@@ -12,6 +12,7 @@ import matplotlib.ticker as ticker
 import numpy as np
 import sys
 from scipy.stats import norm,mode
+plt.ion()
 
 def _key2unique(key, pos=None):
     if isinstance(key, np.ndarray):
