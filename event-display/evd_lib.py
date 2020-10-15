@@ -2,13 +2,103 @@ import h5py
 import threading
 import os
 import numpy as np
+import sklearn.cluster as cluster
+import sklearn.decomposition as dcomp
 from collections import defaultdict
 import queue
 import json
 
 region_ref = h5py.special_dtype(ref=h5py.RegionReference)
 
+class TrackFitter(object):
+    def __init__(self, dbscan_eps=14, dbscan_min_samples=5, z_scale=1.648*0.1):
+        self.z_scale = z_scale # factor to convert clock ticks to mm (vd * clock_period)
+        self.dbscan = cluster.DBSCAN(eps=dbscan_eps, min_samples=dbscan_min_samples)
+        self.pca = dcomp.PCA(n_components=1)
+
+    def fit(self, events, geometry, plot=False):
+        event_tracks = list()
+        for event in events:
+            event_tracks.append(list())
+            t0 = int(event['timestamp'][0])
+            if not len(geometry.keys()): continue
+            if len(event) < 2: continue
+
+            # dbscan to find clusters
+            xyz = np.array([(*geometry[(chip_id, channel_id)],(ts-t0)*self.z_scale) for chip_id, channel_id,ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
+            clustering = self.dbscan.fit(xyz)
+            track_ids = clustering.labels_
+
+            if plot:
+                print('plotting for dbscan tuning...')
+                import matplotlib.pyplot as plt
+                from mpl_toolkits.mplot3d import Axes3D
+                def refit(self, eps):
+                    self.dbscan.set_params(eps=eps)
+                    labels = self.dbscan.fit(xyz).labels_
+                    return len(np.unique(labels[labels!=-1]))
+                eps = np.linspace(0.1,50,100)
+                n = [refit(self,e) for e in eps]
+                plt.ion()
+                fig = plt.figure()
+                fig.add_subplot('121')
+                plt.plot(eps,n)
+                ax = fig.add_subplot('122', projection='3d')
+                ax.scatter(xyz[:,0],xyz[:,1],xyz[:,2])
+                plt.show()
+                plt.pause(5)
+
+            for track_id in np.unique(track_ids):
+                if track_id == -1: continue
+                # PCA on cluster hits
+                mask = track_ids == track_id
+                if np.sum(mask) < 2: continue
+                centroid = np.mean(xyz[mask], axis=0)
+                pca = self.pca.fit(xyz[mask] - centroid)
+                axis = pca.components_[0] / np.linalg.norm(pca.components_[0])
+                r_min,r_max = self._projected_limits(centroid, axis, xyz[mask])
+                residual = self._track_residual(centroid, axis, xyz[mask])
+
+                # convert back to clock ticks
+                r_min[-1] /= self.z_scale
+                r_max[-1] /= self.z_scale
+
+                event_tracks[-1].append(dict(
+                        track_id=track_id,
+                        mask=mask,
+                        centroid=centroid,
+                        axis=axis,
+                        residual=residual,
+                        length=np.linalg.norm(r_max-r_min),
+                        start=r_min,
+                        end=r_max
+                    ))
+                # print(event_tracks[-1])
+        return event_tracks
+
+    def _projected_limits(self, centroid, axis, xyz):
+        s = (xyz - centroid) @ axis
+        r_max = centroid + axis * np.max(s)
+        r_min = centroid + axis * np.min(s)
+        return r_min,r_max
+
+    def _track_residual(self, centroid, axis, xyz):
+        s = (xyz - centroid) @ axis
+        res = np.linalg.norm(xyz - (centroid + np.outer(s,axis)))
+        return np.mean(res)
+
+    def theta(self, axis):
+        return np.arctan(axis[1]/axis[0])
+
+    def phi(self, axis):
+        return np.arctan(np.linalg.norm(axis[:2])/axis[-1])
+
+    def xyp(self, axis, centroid):
+        s = -centroid[-1] / axis[-1]
+        return (centroid + axis * s)[:2]
+
 class LArPixEVDFile(object):
+    track_hids_length = 2048
     dtype_desc = {
         'info' : None,
         'hits' : [
@@ -18,22 +108,22 @@ class LArPixEVDFile(object):
             ('geom', 'i8'), ('event_ref', region_ref), ('track_ref', region_ref)],
         'events' : [
             ('evid', 'i8'), ('track_ref', region_ref), ('hit_ref', region_ref),
-            ('nhit', 'i8'), ('q', 'i8'), ('ts_start', 'i8'), ('ts_end', 'i8')],
+            ('nhit', 'i8'), ('q', 'i8'), ('ts_start', 'i8'), ('ts_end', 'i8'), ('ntracks', 'i8')],
         'tracks' : [
             ('track_id','i8'), ('event_ref', region_ref), ('hit_ref', region_ref),
             ('theta', 'f8'),
             ('phi', 'f8'), ('xp', 'f8'), ('yp', 'f8'), ('nhit', 'i8'),
             ('q', 'i8'), ('ts_start', 'i8'), ('ts_end', 'i8'),
-            ('sigma_theta', 'f8'), ('sigma_phi', 'f8'), ('sigma_x', 'f8'),
-            ('sigma_y', 'f8'), ('length', 'f8'), ('start', '(3,)f8'),
-            ('end', '(3,)f8')],
+            ('residual', 'f8'), ('length', 'f8'), ('start', 'f8', (3,)),
+            ('end', 'f8', (3,))],
     }
 
-    def __init__(self, filename, configuration_file=None, geometry_file=None, pedestal_file=None, buffer_len=1024):
+    def __init__(self, filename, configuration_file=None, geometry_file=None,
+            pedestal_file=None, buffer_len=128):
         self.is_open = True
         if os.path.exists(filename):
             raise OSError('{} exists!'.format(filename))
-        self.h5_file = h5py.File(filename)
+        self.h5_file = h5py.File(filename,'w')
         self.out_buffer = list()
         self.buffer_len = buffer_len
         self.geometry = defaultdict(lambda: (0.,0.))
@@ -59,6 +149,8 @@ class LArPixEVDFile(object):
             with open(configuration_file,'r') as infile:
                 for key,value in json.load(infile).items():
                     self.configuration[key] = value
+
+        self.track_fitter = TrackFitter()
 
         self._queue  = queue.Queue()
         self._outfile_worker = threading.Thread(target=self._parse_events_array)
@@ -114,35 +206,21 @@ class LArPixEVDFile(object):
             tracks_idx = len(tracks_dset)
             hits_idx = len(hits_dset)
             events_dset.resize(events_dset.shape[0] + len(events_list), axis=0)
-            tracks_dset.resize(tracks_dset.shape[0] + len(events_list), axis=0)
+            event_tracks = self.track_fitter.fit(events_list, self.geometry)
+            tracks_dset.resize(tracks_dset.shape[0] + np.sum([len(tracks) for tracks in event_tracks]), axis=0)
             hits_dset.resize(hits_dset.shape[0] + np.sum([len(event) for event in events_list]), axis=0)
 
-            for event in events_list:
+            for event,tracks in zip(events_list,event_tracks):
                 events_dict = defaultdict(int)
                 tracks_dict = defaultdict(int)
                 hits_dict   = defaultdict(int)
                 # create event info
                 events_dict['nhit']     = len(event)
+                events_dict['ntracks']  = len(tracks)
                 events_dict['evid']     = events_idx
                 events_dict['q']        = 0.
-                events_dict['ts_start'] = event[0]['timestamp']
-                events_dict['ts_end']   = event[-1]['timestamp']
-                # create track info
-                tracks_dict['track_id']    = tracks_idx
-                tracks_dict['theta']       = 0
-                tracks_dict['phi']         = 0
-                tracks_dict['xp']          = 0
-                tracks_dict['yp']          = 0
-                tracks_dict['nhit']        = len(event)
-                tracks_dict['q']           = 0
-                tracks_dict['ts_start']    = event[0]['timestamp']
-                tracks_dict['ts_end']      = event[-1]['timestamp']
-                tracks_dict['sigma_theta'] = 0
-                tracks_dict['sigma_phi']   = 0
-                tracks_dict['sigma_x']     = 0
-                tracks_dict['length']      = 0
-                tracks_dict['start']       = (0.,0.,0.)
-                tracks_dict['end']         = (0.,0.,0.)
+                events_dict['ts_start'] = event[0]['timestamp'].astype(int)
+                events_dict['ts_end']   = event[-1]['timestamp'].astype(int)
                 # create hit info
                 hits_dict['hid']       = hits_idx + np.arange(len(event)).astype(int)
                 hits_dict['px']        = np.zeros(len(event))
@@ -151,7 +229,7 @@ class LArPixEVDFile(object):
                     xy = np.array([self.geometry[key] for key in zip(event['chip_id'], event['channel_id'])])
                     hits_dict['px']    = xy[:,0]
                     hits_dict['py']    = xy[:,1]
-                hits_dict['ts']        = event['timestamp']
+                hits_dict['ts']        = event['timestamp'].astype(int)
                 hits_dict['q']         = np.zeros(len(event))
                 hits_dict['iochain']   = event['io_channel']
                 hits_dict['chipid']    = event['chip_id']
@@ -166,33 +244,62 @@ class LArPixEVDFile(object):
                 ped = np.array([self.pedestal[str(unique_id)]['pedestal_mv'] for unique_id in hit_uniqueid])
                 q = event['dataword']/256. * (vref-vcm) + vcm - ped
                 hits_dict['q'] = q.astype(int)
+                # create track info
+                if len(tracks):
+                    tracks_dict['track_id']    = tracks_idx + np.arange(len(tracks)).astype(int)
+                    tracks_dict['nhit']        = np.zeros((len(tracks),))
+                    tracks_dict['q']           = np.zeros((len(tracks),))
+                    tracks_dict['ts_start']    = np.zeros((len(tracks),))
+                    tracks_dict['ts_end']      = np.zeros((len(tracks),))
+                    tracks_dict['theta']       = np.zeros((len(tracks),))
+                    tracks_dict['phi']         = np.zeros((len(tracks),))
+                    tracks_dict['xp']          = np.zeros((len(tracks),))
+                    tracks_dict['yp']          = np.zeros((len(tracks),))
+                    tracks_dict['residual']    = np.zeros((len(tracks),))
+                    tracks_dict['length']      = np.zeros((len(tracks),))
+                    tracks_dict['start']       = np.zeros((len(tracks),3))
+                    tracks_dict['end']         = np.zeros((len(tracks),3))
+                    for i,track in enumerate(tracks):
+                        tracks_dict['nhit'][i]      = np.sum(track['mask'])
+                        tracks_dict['q'][i]         = np.sum(hits_dict['q'][track['mask']])
+                        tracks_dict['theta'][i]     = self.track_fitter.theta(track['axis'])
+                        tracks_dict['phi'][i]       = self.track_fitter.phi(track['axis'])
+                        xp,yp = self.track_fitter.xyp(track['axis'],track['centroid'])
+                        tracks_dict['xp'][i]        = xp
+                        tracks_dict['yp'][i]        = yp
+                        tracks_dict['start'][i]     = track['start']
+                        tracks_dict['end'][i]       = track['end']
+                        tracks_dict['residual'][i]  = track['residual']
+                        tracks_dict['length'][i]    = track['length']
+                        tracks_dict['ts_start'][i]  = hits_dict['ts'][track['mask']][0]
+                        tracks_dict['ts_end'][i]    = hits_dict['ts'][track['mask']][-1]
 
-                # calculate hit level info for tracks / events
+                # calculate hit level info for events
                 q_sum = np.sum(q)
                 events_dict['q'] = q_sum
-                tracks_dict['q'] = q_sum
 
                 # create references
                 event_ref = events_dset.regionref[events_idx]
-                track_ref = tracks_dset.regionref[tracks_idx]
+                track_ref = tracks_dset.regionref[tracks_idx:tracks_idx+len(tracks)]
                 hit_ref = hits_dset.regionref[hits_idx:hits_idx+len(event)]
 
                 events_dict['track_ref'] = track_ref
                 events_dict['hit_ref'] = hit_ref
-                tracks_dict['event_ref'] = event_ref
-                tracks_dict['hit_ref'] = hit_ref
+                tracks_dict['event_ref'] = [event_ref]*len(tracks)
+                tracks_dict['hit_ref'] = [hits_dset.regionref[hits_dict['hid'][track['mask']]] for track in tracks]
                 hits_dict['event_ref'] = [event_ref]*len(event)
                 hits_dict['track_ref'] = [track_ref]*len(event)
 
                 self._fill('events', events_idx, 1, **events_dict)
-                self._fill('tracks', events_idx, 1, **tracks_dict)
+                self._fill('tracks', tracks_idx, len(tracks), **tracks_dict)
                 self._fill('hits', hits_idx, len(event), **hits_dict)
 
                 events_idx += 1
-                tracks_idx += 1
+                tracks_idx += len(tracks)
                 hits_idx   += len(event)
 
     def _fill(self, dset_name, start_idx, n, **kwargs):
+        if n == 0: return
         data = np.zeros(n, dtype=self.dtype_desc[dset_name])
         for key,val in kwargs.items():
             data[key] = val

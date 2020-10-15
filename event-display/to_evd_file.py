@@ -3,7 +3,7 @@ import argparse
 
 from evd_lib import *
 
-def main(in_filename, out_filename, *args, configuration_file=None, geometry_file=None, pedestal_file=None, buffer_size=1536, event_dt=1500, nhit_cut=2, **kwargs):
+def main(in_filename, out_filename, *args, configuration_file=None, geometry_file=None, pedestal_file=None, buffer_size=1536, event_dt=1500, nhit_cut=2, max_packets=-1, **kwargs):
     # load larpix file
     larpix_logfile = load_larpix_logfile(in_filename)
     packets        = larpix_logfile['packets']
@@ -27,7 +27,7 @@ def main(in_filename, out_filename, *args, configuration_file=None, geometry_fil
     start_idx    = 0
     end_idx      = buffer_size
     event_buffer = np.array([])
-    while start_idx <= n_packets:
+    while start_idx <= n_packets and (max_packets < 0 or start_idx <= max_packets):
         # load a buffer of data
         packet_buffer = packets[mask][start_idx:min(end_idx,n_packets)]
 
@@ -41,6 +41,8 @@ def main(in_filename, out_filename, *args, configuration_file=None, geometry_fil
         event_idx = np.argwhere(packet_dt > event_dt).flatten() + 1
         events    = np.split(packet_buffer, event_idx)
         for idx, event in zip(event_idx, events[:-1]):
+            # if len(event) >= nhit_cut or len(event_buffer) >= nhit_cut:
+            #     evd_file._fit_tracks([event], plot=True)
             if len(event) >= nhit_cut:
                 if idx == 0 and len(event_buffer):
                     # current event buffer is a complete event
@@ -55,7 +57,7 @@ def main(in_filename, out_filename, *args, configuration_file=None, geometry_fil
                 else:
                     evd_file.append(event)
                     event_counter  += 1
-            elif len(event_buffer):
+            elif len(event_buffer) >= nhit_cut:
                 # current event buffer is a complete event
                 evd_file.append(event_buffer)
                 event_counter  += 1
@@ -70,11 +72,13 @@ def main(in_filename, out_filename, *args, configuration_file=None, geometry_fil
         packet_counter += len(packet_buffer)
         print('packets parsed: {}\tevents found: {}...'.format(packet_counter, event_counter),end='\r')
 
+
     if len(event_buffer) >= nhit_cut:
         evd_file.append(np.array(event_buffer))
         event_counter  += 1
     print('packets parsed: {}\tevents found: {}...Done!'.format(packet_counter, event_counter))
 
+    print('flushing to disk...')
     evd_file.close()
     larpix_logfile.close()
 
@@ -88,5 +92,6 @@ if __name__ == '__main__':
     parser.add_argument('--buffer_size','-b',default=1536,type=int)
     parser.add_argument('--event_dt',default=1500,type=int)
     parser.add_argument('--nhit_cut',default=2,type=int)
+    parser.add_argument('--max_packets','-n',default=-1,type=int)
     args = parser.parse_args()
     main(**vars(args))
