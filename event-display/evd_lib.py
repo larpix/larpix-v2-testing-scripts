@@ -88,12 +88,15 @@ class TrackFitter(object):
         return np.mean(res)
 
     def theta(self, axis):
-        return np.arctan(axis[1]/axis[0])
-
-    def phi(self, axis):
+        if axis[-1] == 0: return np.pi / 2
         return np.arctan(np.linalg.norm(axis[:2])/axis[-1])
 
+    def phi(self, axis):
+        if axis[0] == 0: return np.pi / 2 * np.sign(axis[1])
+        return np.arctan(axis[1]/axis[0])
+
     def xyp(self, axis, centroid):
+        if axis[-1] == 0: return centroid[:2]
         s = -centroid[-1] / axis[-1]
         return (centroid + axis * s)[:2]
 

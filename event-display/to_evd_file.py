@@ -3,7 +3,7 @@ import argparse
 
 from evd_lib import *
 
-def main(in_filename, out_filename, *args, configuration_file=None, geometry_file=None, pedestal_file=None, buffer_size=1536, event_dt=1500, nhit_cut=2, max_packets=-1, **kwargs):
+def main(in_filename, out_filename, *args, configuration_file=None, geometry_file=None, pedestal_file=None, buffer_size=1536*25, event_dt=1500, nhit_cut=2, max_packets=-1, **kwargs):
     # load larpix file
     larpix_logfile = load_larpix_logfile(in_filename)
     packets        = larpix_logfile['packets']
@@ -89,7 +89,7 @@ if __name__ == '__main__':
     parser.add_argument('--geometry_file','-g',default=None,type=str)
     parser.add_argument('--pedestal_file','-p',default=None,type=str)
     parser.add_argument('--configuration_file','-c',default=None,type=str)
-    parser.add_argument('--buffer_size','-b',default=1536,type=int)
+    parser.add_argument('--buffer_size','-b',default=1536*25,type=int)
     parser.add_argument('--event_dt',default=1500,type=int)
     parser.add_argument('--nhit_cut',default=2,type=int)
     parser.add_argument('--max_packets','-n',default=-1,type=int)
