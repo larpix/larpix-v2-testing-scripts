@@ -165,7 +165,7 @@ parser.add_argument('-i','--input',required=True,help='''
 parser.add_argument('--nhit_sel',default=0, type=int, help='''
     Optional, sub-select on nhit greater than this value
     ''')
-parser.add_argument('--geom_limits', default=[-159.624,159.624,-159.624,159.624,0,300,4.434,23], nargs=8, type=float, metavar=('XMIN','XMAX','YMIN','YMAX','TMIN','TMAX','PIXEL_PITCH','TIME_VOXEL'), help='''
+parser.add_argument('--geom_limits', default=[-159.624,159.624,-159.624,159.624,0,1900,4.434,23], nargs=8, type=float, metavar=('XMIN','XMAX','YMIN','YMAX','TMIN','TMAX','PIXEL_PITCH','TIME_VOXEL'), help='''
     Optional, limits for geometry
     ''')
 args = parser.parse_args()
