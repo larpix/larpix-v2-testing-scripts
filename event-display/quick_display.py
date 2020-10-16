@@ -158,39 +158,43 @@ def generate_plots(event, f, geom=[], fig=None):
 def open_file(filename):
     return h5py.File(filename,'r')
 
-parser = argparse.ArgumentParser()
-parser.add_argument('-i','--input',required=True,help='''
+def main(args):
+    f = open_file(args.input)
+    events = f['events']
+    tracks = f['tracks']
+    hits = f['hits']
+    fig = None
+    ev = 0
+    while True:
+        print('displaying event {} with nhit_sel={}'.format(ev,args.nhit_sel))
+        if ev >= np.sum(events['nhit'] > args.nhit_sel):
+            sys.exit()
+        event = events[events['nhit'] > args.nhit_sel][ev]
+        print('Event:',event)
+        if event['ntracks']: print('Track:',tracks[event['track_ref']])
+        print('Hits:',hits[event['hit_ref']])
+        fig = generate_plots(event, f, args.geom_limits, fig=fig)
+        user_input = input('Next event (q to exit/enter for next/number to skip to position)?\n')
+        print(user_input)
+        if not len(user_input) or user_input[0] == '':
+            ev += 1
+        elif user_input[0].lower() == 'q':
+            sys.exit()
+        else:
+            ev = int(user_input)
+        plt.clf()
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-i','--input',required=True,help='''
     Input event display file
     ''')
-parser.add_argument('--nhit_sel',default=0, type=int, help='''
+    parser.add_argument('--nhit_sel',default=0, type=int, help='''
     Optional, sub-select on nhit greater than this value
     ''')
-parser.add_argument('--geom_limits', default=[-159.624,159.624,-159.624,159.624,0,1900,4.434,23], nargs=8, type=float, metavar=('XMIN','XMAX','YMIN','YMAX','TMIN','TMAX','PIXEL_PITCH','TIME_VOXEL'), help='''
+    parser.add_argument('--geom_limits', default=[-159.624,159.624,-159.624,159.624,0,1900,4.434,23], nargs=8, type=float, metavar=('XMIN','XMAX','YMIN','YMAX','TMIN','TMAX','PIXEL_PITCH','TIME_VOXEL'), help='''
     Optional, limits for geometry
     ''')
-args = parser.parse_args()
+    args = parser.parse_args()
+    main(args)
 
-f = open_file(args.input)
-events = f['events']
-tracks = f['tracks']
-hits = f['hits']
-fig = None
-ev = 0
-while True:
-    print('displaying event {} with nhit_sel={}'.format(ev,args.nhit_sel))
-    if ev >= np.sum(events['nhit'] > args.nhit_sel):
-        sys.exit()
-    event = events[events['nhit'] > args.nhit_sel][ev]
-    print('Event:',event)
-    if event['ntracks']: print('Track:',tracks[event['track_ref']])
-    print('Hits:',hits[event['hit_ref']])
-    fig = generate_plots(event, f, args.geom_limits, fig=fig)
-    user_input = input('Next event (q to exit/enter for next/number to skip to position)?\n')
-    print(user_input)
-    if not len(user_input) or user_input[0] == '':
-        ev += 1
-    elif user_input[0].lower() == 'q':
-        sys.exit()
-    else:
-        ev = int(user_input)
-    plt.clf()
