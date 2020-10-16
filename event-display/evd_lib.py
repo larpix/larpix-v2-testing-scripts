@@ -106,12 +106,12 @@ class LArPixEVDFile(object):
         'info' : None,
         'hits' : [
             ('hid', 'i8'),
-            ('px', 'i8'), ('py', 'i8'), ('ts', 'i8'), ('q', 'i8'),
+            ('px', 'f8'), ('py', 'f8'), ('ts', 'i8'), ('q', 'f8'),
             ('iochain', 'i8'), ('chipid', 'i8'), ('channelid', 'i8'),
             ('geom', 'i8'), ('event_ref', region_ref), ('track_ref', region_ref)],
         'events' : [
             ('evid', 'i8'), ('track_ref', region_ref), ('hit_ref', region_ref),
-            ('nhit', 'i8'), ('q', 'i8'), ('ts_start', 'i8'), ('ts_end', 'i8'), ('ntracks', 'i8')],
+            ('nhit', 'i8'), ('q', 'f8'), ('ts_start', 'i8'), ('ts_end', 'i8'), ('ntracks', 'i8')],
         'tracks' : [
             ('track_id','i8'), ('event_ref', region_ref), ('hit_ref', region_ref),
             ('theta', 'f8'),

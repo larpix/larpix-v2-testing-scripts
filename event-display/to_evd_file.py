@@ -81,6 +81,7 @@ def main(in_filename, out_filename, *args, configuration_file=None, geometry_fil
     print('flushing to disk...')
     evd_file.close()
     larpix_logfile.close()
+    print('done')
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
