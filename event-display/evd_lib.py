@@ -11,10 +11,49 @@ import json
 region_ref = h5py.special_dtype(ref=h5py.RegionReference)
 
 class TrackFitter(object):
-    def __init__(self, dbscan_eps=14, dbscan_min_samples=5, z_scale=1.648*0.1):
-        self.z_scale = z_scale # factor to convert clock ticks to mm (vd * clock_period)
-        self.dbscan = cluster.DBSCAN(eps=dbscan_eps, min_samples=dbscan_min_samples)
+    def __init__(self, dbscan_eps=14, dbscan_min_samples=5, vd=1.648, clock_period=0.1):
+        self._vd = vd
+        self._clock_period = clock_period
+        self._dbscan_eps = dbscan_eps
+        self._dbscan_min_samples = dbscan_min_samples
+        
+        self._set_parameters(
+            dbscan_eps=dbscan_eps,
+            dbscan_min_samples=dbscan_min_samples,
+            vd=vd,
+            clock_period=clock_period
+            )
         self.pca = dcomp.PCA(n_components=1)
+
+    def get_parameters(self, *args):
+        '''
+        Return ``dict`` of specified named parameters and values, if none specified, 
+        return all parameters
+
+        '''
+        rv = dict()
+        for key in ('vd','clock_period','z_scale','dbscan_eps','dbscan_min_samples'):
+            if key in args or not args:
+                rv[key] = getattr(self,'_{}'.format(key))
+        return rv
+        
+    def _set_parameters(self, **kwargs):
+        '''
+        Sets parameters used in fitting tracks::
+        
+            vd: drift velocity [mm/us]
+            clock_period: clock period for timestamp [us]
+            dbscan_eps: epsilon used for clustering [mm]
+            dbscan_min_samples: min samples used for clustering
+
+        '''
+        self._vd = kwargs.get('vd',self._vd)
+        self._clock_period = kwargs.get('clock_period',self._clock_period)
+        self._z_scale = self._vd * self._clock_period
+        
+        self._dbscan_eps = kwargs.get('dbscan_eps',self._dbscan_eps)
+        self._dbscan_min_samples = kwargs.get('dbscan_min_samples',self._dbscan_min_samples)
+        self.dbscan = cluster.DBSCAN(eps=self._dbscan_eps, min_samples=self._dbscan_min_samples)
 
     def fit(self, events, geometry, plot=False):
         event_tracks = list()
@@ -25,7 +64,7 @@ class TrackFitter(object):
             if len(event) < 2: continue
 
             # dbscan to find clusters
-            xyz = np.array([(*geometry[(chip_id, channel_id)],(ts-t0)*self.z_scale) for chip_id, channel_id,ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
+            xyz = np.array([(*geometry[(chip_id, channel_id)],(ts-t0)*self._z_scale) for chip_id, channel_id,ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
             clustering = self.dbscan.fit(xyz)
             track_ids = clustering.labels_
 
@@ -41,9 +80,9 @@ class TrackFitter(object):
                 n = [refit(self,e) for e in eps]
                 plt.ion()
                 fig = plt.figure()
-                fig.add_subplot('121')
+                fig.add_subplot(1,2,1)
                 plt.plot(eps,n)
-                ax = fig.add_subplot('122', projection='3d')
+                ax = fig.add_subplot(1,2,2, projection='3d')
                 ax.scatter(xyz[:,0],xyz[:,1],xyz[:,2])
                 plt.show()
                 plt.pause(5)
@@ -60,8 +99,8 @@ class TrackFitter(object):
                 residual = self._track_residual(centroid, axis, xyz[mask])
 
                 # convert back to clock ticks
-                r_min[-1] /= self.z_scale
-                r_max[-1] /= self.z_scale
+                r_min = np.append(r_min,r_min[-1]/self._z_scale)
+                r_max = np.append(r_max,r_max[-1]/self._z_scale)
 
                 event_tracks[-1].append(dict(
                         track_id=track_id,
@@ -69,7 +108,7 @@ class TrackFitter(object):
                         centroid=centroid,
                         axis=axis,
                         residual=residual,
-                        length=np.linalg.norm(r_max-r_min),
+                        length=np.linalg.norm(r_max[:3]-r_min[:3]),
                         start=r_min,
                         end=r_max
                     ))
@@ -88,12 +127,10 @@ class TrackFitter(object):
         return np.mean(res)
 
     def theta(self, axis):
-        if axis[-1] == 0: return np.pi / 2
-        return np.arctan(np.linalg.norm(axis[:2])/axis[-1])
+        return np.arctan2(np.linalg.norm(axis[:2]),axis[-1])
 
     def phi(self, axis):
-        if axis[0] == 0: return np.pi / 2 * np.sign(axis[1])
-        return np.arctan(axis[1]/axis[0])
+        return np.arctan2(axis[1],axis[0])
 
     def xyp(self, axis, centroid):
         if axis[-1] == 0: return centroid[:2]
@@ -101,7 +138,6 @@ class TrackFitter(object):
         return (centroid + axis * s)[:2]
 
 class LArPixEVDFile(object):
-    track_hids_length = 2048
     dtype_desc = {
         'info' : None,
         'hits' : [
@@ -117,48 +153,69 @@ class LArPixEVDFile(object):
             ('theta', 'f8'),
             ('phi', 'f8'), ('xp', 'f8'), ('yp', 'f8'), ('nhit', 'i8'),
             ('q', 'i8'), ('ts_start', 'i8'), ('ts_end', 'i8'),
-            ('residual', 'f8'), ('length', 'f8'), ('start', 'f8', (3,)),
-            ('end', 'f8', (3,))],
+            ('residual', 'f8'), ('length', 'f8'), ('start', 'f8', (4,)),
+            ('end', 'f8', (4,))],
     }
 
-    def __init__(self, filename, configuration_file=None, geometry_file=None,
-            pedestal_file=None, buffer_len=128):
+    def __init__(self, filename, source_file=None, configuration_file=None, geometry_file=None,
+                 pedestal_file=None, builder_config=None, fitter_config=None, buffer_len=128):
         self.is_open = True
         if os.path.exists(filename):
             raise OSError('{} exists!'.format(filename))
         self.h5_file = h5py.File(filename,'w')
         self.out_buffer = list()
         self.buffer_len = buffer_len
+        
         self.geometry = defaultdict(lambda: (0.,0.))
+        self.geometry_file = geometry_file
         if geometry_file is not None:
             import larpixgeometry.layouts
-            geo = larpixgeometry.layouts.load(geometry_file) # open geometry yaml file
+            geo = larpixgeometry.layouts.load(self.geometry_file) # open geometry yaml file
             for chip, pixels in geo['chips']:
                 for channel, pixel_id in enumerate(pixels):
                     if pixel_id is not None:
                         self.geometry[(chip,channel)] = geo['pixels'][pixel_id][1:3]
+
         self.pedestal = defaultdict(lambda: dict(
             pedestal_mv=550
             ))
+        self.pedestal_file = pedestal_file
         if pedestal_file is not None:
-            with open(pedestal_file,'r') as infile:
+            with open(self.pedestal_file,'r') as infile:
                 for key,value in json.load(infile).items():
                     self.pedestal[key] = value
+
         self.configuration = defaultdict(lambda: dict(
             vref_mv=1500,
             vcm_mv=550
             ))
+        
+        self.configuration_file = configuration_file
         if configuration_file is not None:
-            with open(configuration_file,'r') as infile:
+            with open(self.configuration_file,'r') as infile:
                 for key,value in json.load(infile).items():
                     self.configuration[key] = value
 
-        self.track_fitter = TrackFitter()
+        self.source_file = source_file
+
+        fitter_config = fitter_config if fitter_config else dict()
+        self.track_fitter = TrackFitter(**fitter_config)
 
         self._queue  = queue.Queue()
         self._outfile_worker = threading.Thread(target=self._parse_events_array)
 
         self._create_datasets()
+        self._write_metadata(dict(
+            info=dict(
+                source_file=self.source_file,
+                configuration_file=self.configuration_file,
+                pedestal_file=self.pedestal_file,
+                geometry_file=self.geometry_file
+            ),
+            hits=dict(),
+            events=builder_config if builder_config else dict(),
+            tracks=self.track_fitter.get_parameters()
+        ))
 
     def append(self, event_array):
         self.out_buffer.append(event_array)
@@ -188,6 +245,11 @@ class LArPixEVDFile(object):
                 self.h5_file.create_dataset(dataset_name, (0,), maxshape=(None,), dtype=dataset_dtype)
             else:
                 self.h5_file.create_group(dataset_name)
+
+    def _write_metadata(self, metadata):
+        for name in metadata:
+            for attr,value in metadata[name].items():
+                self.h5_file[name].attrs[attr] = value
 
     def _get_pixel_id(self, chip_id, channel_id):
         for chip_info in self.geometry['chips']:
@@ -260,8 +322,8 @@ class LArPixEVDFile(object):
                     tracks_dict['yp']          = np.zeros((len(tracks),))
                     tracks_dict['residual']    = np.zeros((len(tracks),))
                     tracks_dict['length']      = np.zeros((len(tracks),))
-                    tracks_dict['start']       = np.zeros((len(tracks),3))
-                    tracks_dict['end']         = np.zeros((len(tracks),3))
+                    tracks_dict['start']       = np.zeros((len(tracks),4))
+                    tracks_dict['end']         = np.zeros((len(tracks),4))
                     for i,track in enumerate(tracks):
                         tracks_dict['nhit'][i]      = np.sum(track['mask'])
                         tracks_dict['q'][i]         = np.sum(hits_dict['q'][track['mask']])

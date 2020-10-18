@@ -134,8 +134,8 @@ def generate_plots(event, f, geom=[], fig=None):
     q = hits[hit_ref]['q'] * 0.250
 
     if event['ntracks']:
-        track_start = tracks[track_ref]['start']
-        track_end = tracks[track_ref]['end']
+        track_start = tracks[track_ref]['start'][:,[0,1,3]]
+        track_end = tracks[track_ref]['end'][:,[0,1,3]]
 
     if not fig:
         fig = plt.figure(name)

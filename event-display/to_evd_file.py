@@ -3,7 +3,26 @@ import argparse
 
 from evd_lib import *
 
-def main(in_filename, out_filename, *args, configuration_file=None, geometry_file=None, pedestal_file=None, buffer_size=1536*25, event_dt=1500, nhit_cut=2, max_packets=-1, **kwargs):
+_default_geometry_file      = None
+_default_configuration_file = None
+_default_pedestal_file      = None
+_default_buffer_size        = 38400
+_default_event_dt           = 1500
+_default_nhit_cut           = 2
+_default_max_packets        = -1
+_default_dbscan_eps         = 14.
+_default_dbscan_min_samples = 5
+_default_vd                 = 1.648
+_default_clock_period       = 0.1
+
+def main(in_filename, out_filename, *args,
+         configuration_file=_default_configuration_file, geometry_file=_default_geometry_file,
+         pedestal_file=_default_pedestal_file,
+         buffer_size=_default_buffer_size, event_dt=_default_event_dt, nhit_cut=_default_nhit_cut,
+         max_packets=_default_max_packets,
+         dbscan_eps=_default_dbscan_eps, dbscan_min_samples=_default_dbscan_min_samples,
+         vd=_default_vd, clock_period=_default_clock_period,
+         **kwargs):
     # load larpix file
     larpix_logfile = load_larpix_logfile(in_filename)
     packets        = larpix_logfile['packets']
@@ -11,9 +30,22 @@ def main(in_filename, out_filename, *args, configuration_file=None, geometry_fil
     # create buffered output file
     evd_file       = LArPixEVDFile(
         out_filename,
+        source_file        = in_filename,
         geometry_file      = geometry_file,
         configuration_file = configuration_file,
-        pedestal_file      = pedestal_file
+        pedestal_file      = pedestal_file,
+        builder_config     = dict(
+            buffer_size        = buffer_size,
+            event_dt           = event_dt,
+            nhit_cut           = nhit_cut,
+            max_packets        = max_packets
+            ),
+        fitter_config      = dict(
+            vd                 = vd,
+            clock_period       = clock_period,
+            dbscan_eps         = dbscan_eps,
+            dbscan_min_samples = dbscan_min_samples
+            )
         )
     event_counter  = 0
     packet_counter = 0
@@ -78,7 +110,7 @@ def main(in_filename, out_filename, *args, configuration_file=None, geometry_fil
         event_counter  += 1
     print('packets parsed: {}\tevents found: {}...Done!'.format(packet_counter, event_counter))
 
-    print('flushing to disk...')
+    print('finishing up...')
     evd_file.close()
     larpix_logfile.close()
     print('done')
@@ -87,12 +119,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--in_filename','-i',required=True,type=str)
     parser.add_argument('--out_filename','-o',required=True,type=str)
-    parser.add_argument('--geometry_file','-g',default=None,type=str)
-    parser.add_argument('--pedestal_file','-p',default=None,type=str)
-    parser.add_argument('--configuration_file','-c',default=None,type=str)
-    parser.add_argument('--buffer_size','-b',default=1536*25,type=int)
-    parser.add_argument('--event_dt',default=1500,type=int)
-    parser.add_argument('--nhit_cut',default=2,type=int)
-    parser.add_argument('--max_packets','-n',default=-1,type=int)
+    parser.add_argument('--geometry_file','-g',default=_default_geometry_file,type=str,help='''default=%(default)s''')
+    parser.add_argument('--pedestal_file','-p',default=_default_pedestal_file,type=str,help='''default=%(default)s''')
+    parser.add_argument('--configuration_file','-c',default=_default_configuration_file,type=str,help='''default=%(default)s''')
+    parser.add_argument('--buffer_size','-b',default=_default_buffer_size,type=int,help='''default=%(default)s''')
+    parser.add_argument('--event_dt',default=_default_event_dt,type=int,help='''default=%(default)s''')
+    parser.add_argument('--nhit_cut',default=_default_nhit_cut,type=int,help='''default=%(default)s''')
+    parser.add_argument('--max_packets','-n',default=_default_max_packets,type=int,help='''default=%(default)s''')
+    parser.add_argument('--vd',default=_default_vd,type=float,help='''default=%(default)s''')
+    parser.add_argument('--clock_period',default=_default_clock_period,type=float,help='''default=%(default)s''')
+    parser.add_argument('--dbscan_eps',default=_default_dbscan_eps,type=float,help='''default=%(default)s''')
+    parser.add_argument('--dbscan_min_samples',default=_default_dbscan_min_samples,type=int,help='''default=%(default)s''') 
     args = parser.parse_args()
     main(**vars(args))
