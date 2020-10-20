@@ -16,7 +16,7 @@ class TrackFitter(object):
         self._clock_period = clock_period
         self._dbscan_eps = dbscan_eps
         self._dbscan_min_samples = dbscan_min_samples
-        
+
         self._set_parameters(
             dbscan_eps=dbscan_eps,
             dbscan_min_samples=dbscan_min_samples,
@@ -27,7 +27,7 @@ class TrackFitter(object):
 
     def get_parameters(self, *args):
         '''
-        Return ``dict`` of specified named parameters and values, if none specified, 
+        Return ``dict`` of specified named parameters and values, if none specified,
         return all parameters
 
         '''
@@ -36,11 +36,11 @@ class TrackFitter(object):
             if key in args or not args:
                 rv[key] = getattr(self,'_{}'.format(key))
         return rv
-        
+
     def _set_parameters(self, **kwargs):
         '''
         Sets parameters used in fitting tracks::
-        
+
             vd: drift velocity [mm/us]
             clock_period: clock period for timestamp [us]
             dbscan_eps: epsilon used for clustering [mm]
@@ -50,7 +50,7 @@ class TrackFitter(object):
         self._vd = kwargs.get('vd',self._vd)
         self._clock_period = kwargs.get('clock_period',self._clock_period)
         self._z_scale = self._vd * self._clock_period
-        
+
         self._dbscan_eps = kwargs.get('dbscan_eps',self._dbscan_eps)
         self._dbscan_min_samples = kwargs.get('dbscan_min_samples',self._dbscan_min_samples)
         self.dbscan = cluster.DBSCAN(eps=self._dbscan_eps, min_samples=self._dbscan_min_samples)
@@ -165,7 +165,7 @@ class LArPixEVDFile(object):
         self.h5_file = h5py.File(filename,'w')
         self.out_buffer = list()
         self.buffer_len = buffer_len
-        
+
         self.geometry = defaultdict(lambda: (0.,0.))
         self.geometry_file = geometry_file
         if geometry_file is not None:
@@ -189,7 +189,7 @@ class LArPixEVDFile(object):
             vref_mv=1500,
             vcm_mv=550
             ))
-        
+
         self.configuration_file = configuration_file
         if configuration_file is not None:
             with open(self.configuration_file,'r') as infile:
@@ -208,9 +208,9 @@ class LArPixEVDFile(object):
         self._write_metadata(dict(
             info=dict(
                 source_file=self.source_file,
-                configuration_file=self.configuration_file,
-                pedestal_file=self.pedestal_file,
-                geometry_file=self.geometry_file
+                configuration_file=self.configuration_file if self.configuration_file else '',
+                pedestal_file=self.pedestal_file if self.pedestal_file else '',
+                geometry_file=self.geometry_file if self.geometry_file else ''
             ),
             hits=dict(),
             events=builder_config if builder_config else dict(),
