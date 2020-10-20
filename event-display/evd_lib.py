@@ -116,14 +116,14 @@ class TrackFitter(object):
         return event_tracks
 
     def _projected_limits(self, centroid, axis, xyz):
-        s = (xyz - centroid) @ axis
+        s = np.dot((xyz - centroid), axis)
         r_max = centroid + axis * np.max(s)
         r_min = centroid + axis * np.min(s)
         return r_min,r_max
 
     def _track_residual(self, centroid, axis, xyz):
-        s = (xyz - centroid) @ axis
-        res = np.linalg.norm(xyz - (centroid + np.outer(s,axis)))
+        s = np.dot((xyz - centroid), axis)
+        res = np.linalg.norm(xyz - (centroid + np.outer(s,axis)),axis=-1)
         return np.mean(res)
 
     def theta(self, axis):
