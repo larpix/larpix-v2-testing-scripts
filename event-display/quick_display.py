@@ -133,21 +133,21 @@ def generate_plots(event, f, geom=[], fig=None):
     z = hits[hit_ref]['ts'] - event['ts_start']
     q = hits[hit_ref]['q'] * 0.250
 
-    if tracks and event['ntracks']:
+    if tracks and 'ntracks' in event:
         track_start = tracks[track_ref]['start'][:,[0,1,3]]
         track_end = tracks[track_ref]['end'][:,[0,1,3]]
 
     if not fig:
         fig = plt.figure(name)
     fig = vol3d(x,y,z,q,*geom,name=name,fig=fig)
-    if tracks and event['ntracks']:
+    if tracks and 'ntracks' in event:
         for s,e in zip(track_start,track_end):
             fig = line3d((s[0],e[0]),(s[1],e[1]),(s[2],e[2]),*geom,name=name,fig=fig)
         for track in tracks[track_ref]:
             hit_ref = track['hit_ref']
             fig = line3d(hits[hit_ref]['px'],hits[hit_ref]['py'],hits[hit_ref]['ts']-event['ts_start'],*geom,name=name,fig=fig,points=True)
     fig = proj2d(x,y,q,*geom,name=name,fig=fig)
-    if tracks and event['ntracks']:
+    if tracks and 'ntracks' in event:
         for s,e in zip(track_start,track_end):
             fig = line2d((s[0],e[0]),(s[1],e[1]),*geom,name=name,fig=fig)
     fig = proj_time(z,q,*geom,name=name,fig=fig)
@@ -171,7 +171,7 @@ def main(args):
             sys.exit()
         event = events[events['nhit'] > args.nhit_sel][ev]
         print('Event:',event)
-        if tracks and event['ntracks']: print('Track:',tracks[event['track_ref']])
+        if tracks and 'ntracks' in event: print('Track:',tracks[event['track_ref']])
         print('Hits:',hits[event['hit_ref']])
         fig = generate_plots(event, f, args.geom_limits, fig=fig)
         user_input = input('Next event (q to exit/enter for next/number to skip to position)?\n')
