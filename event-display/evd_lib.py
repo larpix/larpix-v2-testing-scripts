@@ -152,7 +152,7 @@ class LArPixEVDFile(object):
             ('track_id','i8'), ('event_ref', region_ref), ('hit_ref', region_ref),
             ('theta', 'f8'),
             ('phi', 'f8'), ('xp', 'f8'), ('yp', 'f8'), ('nhit', 'i8'),
-            ('q', 'i8'), ('ts_start', 'i8'), ('ts_end', 'i8'),
+            ('q', 'f8'), ('ts_start', 'i8'), ('ts_end', 'i8'),
             ('residual', 'f8'), ('length', 'f8'), ('start', 'f8', (4,)),
             ('end', 'f8', (4,))],
     }
@@ -308,7 +308,7 @@ class LArPixEVDFile(object):
                 vcm = np.array([self.configuration[str(unique_id)]['vcm_mv'] for unique_id in hit_uniqueid])
                 ped = np.array([self.pedestal[str(unique_id)]['pedestal_mv'] for unique_id in hit_uniqueid])
                 q = event['dataword']/256. * (vref-vcm) + vcm - ped
-                hits_dict['q'] = q.astype(int)
+                hits_dict['q'] = q
                 # create track info
                 if len(tracks):
                     tracks_dict['track_id']    = tracks_idx + np.arange(len(tracks)).astype(int)
