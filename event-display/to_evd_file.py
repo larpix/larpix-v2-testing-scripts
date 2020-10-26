@@ -73,14 +73,13 @@ def main(in_filename, out_filename, *args,
         event_idx = np.argwhere(packet_dt > event_dt).flatten() + 1
         events    = np.split(packet_buffer, event_idx)
         for idx, event in zip(event_idx, events[:-1]):
-            # if len(event) >= nhit_cut or len(event_buffer) >= nhit_cut:
-            #     evd_file._fit_tracks([event], plot=True)
-            if len(event) >= nhit_cut:
-                if idx == 0 and len(event_buffer):
-                    # current event buffer is a complete event
-                    evd_file.append(event_buffer)
-                    event_counter  += 1
-                elif len(event_buffer):
+            if idx == 1 and len(event_buffer) >= nhit_cut:
+                # current event buffer is a complete event
+                evd_file.append(event_buffer)
+                event_counter  += 1
+                event_buffer = np.array([])
+            if len(event)+len(event_buffer) >= nhit_cut:
+                if len(event_buffer):
                     # event found within packet buffer (combine with existing event buffer)
                     event = np.append(event_buffer, event)
                     evd_file.append(event)
@@ -89,11 +88,7 @@ def main(in_filename, out_filename, *args,
                 else:
                     evd_file.append(event)
                     event_counter  += 1
-            elif len(event_buffer) >= nhit_cut:
-                # current event buffer is a complete event
-                evd_file.append(event_buffer)
-                event_counter  += 1
-                event_buffer = np.array([])
+
         # keep any lingering packets for next iteration
         event_buffer = np.array(events[-1])
 
@@ -111,6 +106,7 @@ def main(in_filename, out_filename, *args,
     print('packets parsed: {}\tevents found: {}...Done!'.format(packet_counter, event_counter))
 
     print('finishing up...')
+    evd_file.verbose = True
     evd_file.close()
     larpix_logfile.close()
     print('done')
