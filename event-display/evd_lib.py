@@ -62,11 +62,11 @@ class TrackFitter(object):
         self._dbscan_eps = kwargs.get('dbscan_eps',self._dbscan_eps)
         self._dbscan_min_samples = kwargs.get('dbscan_min_samples',self._dbscan_min_samples)
         self.dbscan = cluster.DBSCAN(eps=self._dbscan_eps, min_samples=self._dbscan_min_samples)
-        
+
         self._min_samples = kwargs.get('ransac_min_samples',self._ransac_min_samples)
         self._residual_threshold = kwargs.get('ransac_residual_threshold',self._ransac_residual_threshold)
         self._max_trials = kwargs.get('ransac_max_trials',self._ransac_max_trials)
-        
+
     def _plot_dbscan(self,xyz):
         print('plotting for dbscan tuning...')
         import matplotlib.pyplot as plt
@@ -85,20 +85,20 @@ class TrackFitter(object):
         ax.scatter(xyz[:,0],xyz[:,1],xyz[:,2])
         plt.show()
         plt.pause(5)
-        
+
     def _do_dbscan(self,xyz,mask):
         clustering = self.dbscan.fit(xyz[mask])
         track_ids = np.zeros(len(mask))-1
         track_ids[mask] = clustering.labels_
         return track_ids
-    
+
     def _do_ransac(self,xyz,mask):
         model_robust, inliers = ransac(xyz[mask], LineModelND,
             min_samples=self._ransac_min_samples,
             residual_threshold=self._ransac_residual_threshold,
             max_trials=self._ransac_max_trials)
         return inliers
-    
+
     def _do_pca(self,xyz,mask):
         centroid = np.mean(xyz[mask], axis=0)
         pca = self.pca.fit(xyz[mask] - centroid)
@@ -114,9 +114,9 @@ class TrackFitter(object):
             t0 = event['timestamp'][0].astype(int)
             iter_mask = np.ones(len(event)).astype(bool)
             while True:
-                xyz = np.array([(*geometry[(chip_id, channel_id)],(ts-t0)*self._z_scale) 
+                xyz = np.array([(*geometry[(chip_id, channel_id)],(ts-t0)*self._z_scale)
                     for chip_id, channel_id, ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
-                
+
                 # dbscan to find clusters
                 track_ids = self._do_dbscan(xyz,iter_mask)
                 if plot:
@@ -129,7 +129,7 @@ class TrackFitter(object):
                     # ransac for linear hits
                     inliers = self._do_ransac(xyz,mask)
                     mask[mask] = inliers
-                   
+
                     if np.sum(mask) < 2: continue
                     # PCA on central hits
                     centroid, axis = self._do_pca(xyz,mask)
@@ -177,7 +177,7 @@ class TrackFitter(object):
         if axis[-1] == 0: return centroid[:2]
         s = -centroid[-1] / axis[-1]
         return (centroid + axis * s)[:2]
-    
+
 class LArPixEVDFile(object):
     dtype_desc = {
         'info' : None,
@@ -197,13 +197,13 @@ class LArPixEVDFile(object):
             ('residual', 'f8', (3,)), ('length', 'f8'), ('start', 'f8', (4,)),
             ('end', 'f8', (4,))],
     }
-    
+
     @staticmethod
     def _default_pxy():
         return (0.,0.)
-    
+
     def __init__(self, filename, source_file=None, configuration_file=None, geometry_file=None,
-                 pedestal_file=None, builder_config=None, fitter_config=None, buffer_len=1024, verbose=False):
+                 pedestal_file=None, builder_config=None, fitter_config=None, buffer_len=1024, verbose=False, fit_tracks=True):
         self.verbose = verbose
         self.is_open = True
         if os.path.exists(filename):
@@ -211,8 +211,8 @@ class LArPixEVDFile(object):
         self.h5_filename = filename
         self.out_buffer = list()
         self.buffer_len = buffer_len
+        self.fit_tracks = fit_tracks
 
-        
         self.geometry = defaultdict(self._default_pxy)
         self.geometry_file = geometry_file
         if geometry_file is not None:
@@ -261,7 +261,7 @@ class LArPixEVDFile(object):
             ),
             hits=dict(),
             events=builder_config if builder_config else dict(),
-            tracks=self.track_fitter.get_parameters()
+            tracks=self.track_fitter.get_parameters() if self.fit_tracks else dict()
         ))
 
     def append(self, event_array):
@@ -322,7 +322,7 @@ class LArPixEVDFile(object):
                 tracks_idx = len(tracks_dset)
                 hits_idx = len(hits_dset)
                 events_dset.resize(events_dset.shape[0] + len(events_list), axis=0)
-                event_tracks = self.track_fitter.fit(events_list, self.geometry)
+                event_tracks = self.track_fitter.fit(events_list, self.geometry) if self.fit_tracks else [list() for i in range(len(events_list))]
                 tracks_dset.resize(tracks_dset.shape[0] + np.sum([len(tracks) for tracks in event_tracks]), axis=0)
                 hits_dset.resize(hits_dset.shape[0] + np.sum([len(event) for event in events_list]), axis=0)
 

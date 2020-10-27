@@ -14,6 +14,7 @@ _default_dbscan_eps         = 14.
 _default_dbscan_min_samples = 5
 _default_vd                 = 1.648
 _default_clock_period       = 0.1
+_default_skip_track_fit       = False
 
 def main(in_filename, out_filename, *args,
          configuration_file=_default_configuration_file, geometry_file=_default_geometry_file,
@@ -22,6 +23,7 @@ def main(in_filename, out_filename, *args,
          max_packets=_default_max_packets,
          dbscan_eps=_default_dbscan_eps, dbscan_min_samples=_default_dbscan_min_samples,
          vd=_default_vd, clock_period=_default_clock_period,
+         skip_track_fit=_default_skip_track_fit,
          **kwargs):
     # load larpix file
     larpix_logfile = load_larpix_logfile(in_filename)
@@ -45,7 +47,8 @@ def main(in_filename, out_filename, *args,
             clock_period       = clock_period,
             dbscan_eps         = dbscan_eps,
             dbscan_min_samples = dbscan_min_samples
-            )
+            ),
+        fit_tracks = not skip_track_fit
         )
     event_counter  = 0
     packet_counter = 0
@@ -125,6 +128,7 @@ if __name__ == '__main__':
     parser.add_argument('--vd',default=_default_vd,type=float,help='''default=%(default)s''')
     parser.add_argument('--clock_period',default=_default_clock_period,type=float,help='''default=%(default)s''')
     parser.add_argument('--dbscan_eps',default=_default_dbscan_eps,type=float,help='''default=%(default)s''')
-    parser.add_argument('--dbscan_min_samples',default=_default_dbscan_min_samples,type=int,help='''default=%(default)s''') 
+    parser.add_argument('--dbscan_min_samples',default=_default_dbscan_min_samples,type=int,help='''default=%(default)s''')
+    parser.add_argument('--skip_track_fit',action='store_true',help='''flag to skip track fitting''')
     args = parser.parse_args()
     main(**vars(args))
