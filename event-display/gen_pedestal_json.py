@@ -50,7 +50,7 @@ def main(infile, vdda=_default_vdda, vref_dac=_default_vref_dac,
         min_idx,max_idx = max(peak_bin-mean_trunc,0), min(peak_bin+mean_trunc,len(vals))
         ped_adc = np.average(bins[min_idx:max_idx]+0.5, weights=vals[min_idx:max_idx])
 
-        config_dict[unique] = dict(
+        config_dict[str(unique)] = dict(
             pedestal_mv=adc2mv(ped_adc,vref_mv,vcm_mv)
             )
     with open(infile.strip('.h5')+'evd_ped.json','w') as fo:
