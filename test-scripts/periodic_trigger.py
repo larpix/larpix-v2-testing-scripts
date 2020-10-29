@@ -5,7 +5,7 @@ import larpix.logger
 import base
 import base_warm
 
-def main(channels=range(0,64,1), rolling=True, trigger_cycles=0,
+def main(channels=range(0,64,1), rolling=False, trigger_cycles=200000,
     fifo_diagnostics=True, runtime=2, digital_monitor=False):
     print('periodic trigger config')
 

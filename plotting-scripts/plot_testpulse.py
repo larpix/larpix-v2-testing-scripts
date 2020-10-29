@@ -36,6 +36,21 @@ def plot_channel_eff(data, channel, name=None):
     x = data['tp_dacs'][channel] # tp_dac
     y = data['tp_effs'][channel] # tp_eff
     plt.plot(x, y, '.-', label='channel {}'.format(channel))
+    #plt.hist2d()
+    plt.xlabel('injected pulse [DAC]')
+    plt.ylabel('trigger efficiency')
+    plt.legend()
+    plt.tight_layout()
+
+def plot_mean_eff(data, name=None):
+    if name is None:
+        plt.figure('channel mean eff')
+    else:
+        plt.figure(name)
+    x = np.mean(np.array([np.array(data['tp_dacs'][channel]) for channel in data['tp_dacs']]),axis=-1) # tp_dac
+    y = np.mean(np.array([np.array(data['tp_effs'][channel]) for channel in data['tp_effs']]),axis=-1) # tp_eff
+    plt.plot(x, y, '.-', label='channel {}'.format(channel))
+    #plt.hist2d()
     plt.xlabel('injected pulse [DAC]')
     plt.ylabel('trigger efficiency')
     plt.legend()
@@ -94,20 +109,21 @@ def main(*args, cluster_dt=1000000, **kwargs):
             vref_dac = input_file_info[2]
             vcm_dac = input_file_info[3]
             n_pulses = input_file_info[4]
-            ped_adc = config_data['pedestal_adc']
-            ped_vref_dac = config_data['pedestal_vref_dac']
-            ped_vcm_dac = config_data['pedestal_vcm_dac']
-            ped_mv = [adc_2_mv(ped, ped_vref_dac, ped_vcm_dac) for ped in ped_adc]
+            ped_adc = 0 #config_data['pedestal_adc']
+            ped_vref_dac = 255#config_data['pedestal_vref_dac']
+            ped_vcm_dac = 0#config_data['pedestal_vcm_dac']
+            ped_mv = [0]*64#[adc_2_mv(ped, ped_vref_dac, ped_vcm_dac) for ped in ped_adc]
 
             f = h5py.File(filepath,'r')
 
             print('finding pulse clusters...')
-            pulse_idcs = np.argwhere(f['packets'][:]['packet_type'] == 2).flatten()
+            chip_mask = f['packets'][:]['chip_id'] == 13
+            pulse_idcs = np.argwhere(f['packets'][chip_mask]['packet_type'] == 2).flatten()
             pulse_clusters = np.split(f['packets'], pulse_idcs)[1:]
             print('found',len(pulse_clusters),'clusters')
 
             print('collecting pulse data...')
-            for channel in set(f['packets'][:]['channel_id']):
+            for channel in set(f['packets'][chip_mask]['channel_id']):
                 tp_dacs[channel].append(tp_dac)
 
                 peaks = []

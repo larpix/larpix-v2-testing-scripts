@@ -27,7 +27,7 @@ def main(controller_config_file=None, logger=False, reset=True):
 
     # create controller
     c = larpix.Controller()
-    c.io = larpix.io.SerialPort()
+    # c.io = larpix.io.SerialPort()
     if logger:
         print('logger')
         c.logger = larpix.logger.HDF5Logger(version='2.0')
@@ -48,9 +48,10 @@ def main(controller_config_file=None, logger=False, reset=True):
 
     if reset:
         # issues hard reset to larpix
-        c.io.set_larpix_uart_clk_ratio(clk_ctrl_2_clk_ratio_map[0])
-        c.io.set_larpix_reset_cnt(128)
-        c.io.larpix_reset()
+        # c.io.set_larpix_uart_clk_ratio(clk_ctrl_2_clk_ratio_map[0])
+        # c.io.set_larpix_reset_cnt(128)
+        # c.io.larpix_reset()
+        pass
 
     # initialize network
     for io_group, io_channels in c.network.items():
@@ -72,7 +73,7 @@ def main(controller_config_file=None, logger=False, reset=True):
                 c[chip_key].config.clk_ctrl = clk_ctrl
                 c.write_configuration(chip_key, 'clk_ctrl')
                 c.write_configuration(chip_key, 'clk_ctrl')
-    c.io.set_larpix_uart_clk_ratio(clk_ctrl_2_clk_ratio_map[clk_ctrl])
+    # c.io.set_larpix_uart_clk_ratio(clk_ctrl_2_clk_ratio_map[clk_ctrl])
 
     # set other configuration registers
     for chip_key in c.chips:

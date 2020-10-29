@@ -17,13 +17,14 @@ def main(*args):
 
     f = h5py.File(filename,'r')
 
-    channels = set(f['packets'][:]['channel_id'])
-    valid_parity_mask = f['packets'][:]['valid_parity'] == 1
+    unique_channel = f['packets'][:]['channel_id'].astype(int) + 100*f['packets'][:]['chip_id'].astype(int)
+    channels = set(unique_channel)
+    # valid_parity_mask = f['packets'][:]['valid_parity'] == 1
 
     data = dict()
     for channel in channels:
-        channel_mask = f['packets'][valid_parity_mask]['channel_id'] == channel
-        packet_idx = [i for i,ch in enumerate(f['packets'][valid_parity_mask]['channel_id']) if ch == channel]
+        channel_mask = (unique_channel == channel)
+        packet_idx = [i for i,ch in enumerate(unique_channel) if ch == channel]
         timestamp = f['packets'][channel_mask]['timestamp']
         adc = f['packets'][channel_mask]['dataword']
 
@@ -34,13 +35,15 @@ def main(*args):
             adc = adc
             )
 
+    alpha=0.5
+
     plt.figure('timestamp v. index')
     for channel in data.keys():
         plt.plot(
             data[channel]['packet_idx'],
             data[channel]['timestamp'],
             '.',
-            alpha=1/len(data.keys())
+            alpha=alpha
             )
     plt.legend(data.keys())
 
@@ -50,7 +53,7 @@ def main(*args):
             data[channel]['packet_idx'],
             data[channel]['adc'],
             '.',
-            alpha=1/len(data.keys())
+            alpha=alpha
             )
     plt.legend(data.keys())
 
@@ -60,7 +63,17 @@ def main(*args):
             data[channel]['timestamp'],
             data[channel]['adc'],
             '.',
-            alpha=1/len(data.keys())
+            alpha=alpha
+            )
+    plt.legend(data.keys())
+
+    plt.figure('channel v. timestamp')
+    for channel in data.keys():
+        plt.plot(
+            data[channel]['timestamp'],
+            [channel for value in data[channel]['timestamp']],
+            '.',
+            alpha=alpha
             )
     plt.legend(data.keys())
 
