@@ -1,6 +1,7 @@
 import numpy as np
 import json
 import argparse
+import time
 
 from evd_lib import *
 
@@ -10,7 +11,7 @@ _default_pedestal_file         = None
 _default_buffer_size           = 38400
 _default_event_dt              = 1820
 _default_max_event_dt          = 3*1820
-_default_nhit_cut              = 2
+_default_nhit_cut              = 10
 _default_max_packets           = -1
 _default_dbscan_eps            = 14.
 _default_dbscan_min_samples    = 5
@@ -22,6 +23,7 @@ _default_external_trigger_conf = dict(
     larpix_trigger_channels = {'All': [6]}
     )
 _default_skip_trigger_finding  = False
+_default_force                 = False
 
 def split_at_timestamp(event,timestamp):
     timestamps = event['timestamp'].astype(int)
@@ -42,6 +44,7 @@ def main(in_filename, out_filename, *args,
          skip_track_fit=_default_skip_track_fit,
          external_trigger_conf=_default_external_trigger_conf,
          skip_trigger_finding=_default_skip_trigger_finding,
+         force=_default_force,
          **kwargs):
     # load larpix file
     larpix_logfile = load_larpix_logfile(in_filename)
@@ -68,7 +71,8 @@ def main(in_filename, out_filename, *args,
             ),
         fit_tracks = not skip_track_fit,
         trigger_finder_config  = external_trigger_conf,
-        find_triggers = not skip_trigger_finding
+        find_triggers = not skip_trigger_finding,
+        force=force
         )
     event_counter  = 0
     packet_counter = 0
@@ -88,7 +92,8 @@ def main(in_filename, out_filename, *args,
     start_idx    = 0
     end_idx      = buffer_size
     event_buffer = np.array([],dtype=packets.dtype)
-    while start_idx <= n_packets and (max_packets < 0 or start_idx <= max_packets):
+    start_time   = time.time()
+    while start_idx < n_packets and (max_packets < 0 or start_idx < max_packets):
         # load a buffer of data
         packet_buffer = np.copy(packets[mask][start_idx:min(end_idx,n_packets)])
         packet_buffer['timestamp'] = packet_buffer['timestamp'].astype(int) % np.power(2,31) # ignore 32nd bit from pacman triggers
@@ -132,14 +137,14 @@ def main(in_filename, out_filename, *args,
         end_idx   = end_idx + buffer_size
 
         packet_counter += len(packet_buffer)
-        print('packets parsed: {}\tevents found: {}...'.format(packet_counter, event_counter),end='\r')
+        print('packets parsed: {}/{}\tevents found: {}\ttime remaining {:0.02f}min...'.format(packet_counter, n_packets, event_counter, (time.time()-start_time)/packet_counter/60 * (n_packets-packet_counter)),end='\r')
 
 
     while len(event_buffer) >= nhit_cut:
         event,event_buffer = split_at_timestamp(event_buffer,np.min(event_buffer['timestamp'].astype(int))+max_event_dt)
         evd_file.append(np.array(event))
         event_counter  += 1
-    print('packets parsed: {}\tevents found: {}...Done!'.format(packet_counter, event_counter))
+    print('packets parsed: {}/{}\tevents found: {}\ttime remaining {:0.02f}min...Done!'.format(packet_counter, n_packets, event_counter, (time.time()-start_time)/(packet_counter+1e-9)/60 * (n_packets-packet_counter)))
 
     print('finishing up...')
     evd_file.verbose = True
@@ -166,5 +171,6 @@ if __name__ == '__main__':
     parser.add_argument('--skip_track_fit',action='store_true',help='''flag to skip track fitting''')
     parser.add_argument('--external_trigger_conf',default=_default_external_trigger_conf,type=json.loads,help='''config for external trigger finder, json-formatted dict with keys 'pacman_trigger_enabled' and 'larpix_trigger_channels', default=%(default)s''')
     parser.add_argument('--skip_trigger_finding',action='store_true',help='''flag to skip external trigger finding''')
+    parser.add_argument('--force','-f',action='store_true',help='''overwrite file if it exists''')
     args = parser.parse_args()
     main(**vars(args))

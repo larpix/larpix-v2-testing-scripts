@@ -1,5 +1,6 @@
 import h5py
 import multiprocessing
+import threading
 import os
 import numpy as np
 import sklearn.cluster as cluster
@@ -11,6 +12,19 @@ import json
 import time
 
 region_ref = h5py.special_dtype(ref=h5py.RegionReference)
+
+class NonThread(object):
+    def __init__(self,target):
+        self.target = target
+        
+    def start(self):
+        self.target()
+        
+    def join(self):
+        pass
+    
+    def is_alive(self):
+        return False
 
 class ExternalTriggerFinder(object):
     def __init__(self, pacman_trigger_enabled=True, larpix_trigger_channels=None):
@@ -167,60 +181,62 @@ class TrackFitter(object):
         axis = pca.components_[0] / np.linalg.norm(pca.components_[0])
         return centroid, axis
 
-    def fit(self, events, geometry, trigs_list=None, plot=False):
+    def fit(self, event, geometry, trigs=None, plot=False):
         event_tracks = list()
-        if trigs_list is None:
-            trigs_list = [[]]*len(events)
-        for event,trigs in zip(events,trigs_list):
-            event_tracks.append(list())
-            if not len(geometry.keys()): continue
-            if len(event) < 2: continue
-            if trigs:
-                t0 = np.min([trig['ts'] for trig in trigs]).astype(int)
-            else:
-                t0 = event['timestamp'][0].astype(int)
-            iter_mask = np.ones(len(event)).astype(bool)
-            while True:
-                xyz = np.array([(*geometry[(chip_id, channel_id)],(ts-t0)*self._z_scale)
-                    for chip_id, channel_id, ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
+        if trigs is None: trigs = list()
+#         if trigs_list is None:
+#             trigs_list = [list()]*len(events)
+#         for event,trigs in zip(events,trigs_list):
+#             event_tracks.append(list())
+        if not len(geometry.keys()): return list()#continue
+        if len(event) < 2: return list()#continue
+        if trigs:
+            t0 = np.min([trig['ts'] for trig in trigs]).astype(int)
+        else:
+            t0 = event['timestamp'][0].astype(int)
+        iter_mask = np.ones(len(event)).astype(bool)
+        while True:
+            xyz = np.array([(*geometry[(chip_id, channel_id)],(ts-t0)*self._z_scale)
+                for chip_id, channel_id, ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
 
-                # dbscan to find clusters
-                track_ids = self._do_dbscan(xyz,iter_mask)
-                if plot:
-                    self._plot_dbscan(xyz)
+            # dbscan to find clusters
+            track_ids = self._do_dbscan(xyz,iter_mask)
+            if plot:
+                self._plot_dbscan(xyz)
 
-                for track_id in np.unique(track_ids):
-                    if track_id == -1: continue
-                    mask = track_ids == track_id
-                    if np.sum(mask) <= self._ransac_min_samples: continue
-                    # ransac for linear hits
-                    inliers = self._do_ransac(xyz,mask)
-                    mask[mask] = inliers
+            for track_id in np.unique(track_ids):
+                if track_id == -1: continue
+                mask = track_ids == track_id
+                if np.sum(mask) <= self._ransac_min_samples: continue
+                # ransac for linear hits
+                inliers = self._do_ransac(xyz,mask)
+                mask[mask] = inliers
 
-                    if np.sum(mask) < 2: continue
-                    # PCA on central hits
-                    centroid, axis = self._do_pca(xyz,mask)
-                    r_min,r_max = self._projected_limits(centroid, axis, xyz[mask])
-                    residual = self._track_residual(centroid, axis, xyz[mask])
+                if np.sum(mask) < 2: continue
+                # PCA on central hits
+                centroid, axis = self._do_pca(xyz,mask)
+                r_min,r_max = self._projected_limits(centroid, axis, xyz[mask])
+                residual = self._track_residual(centroid, axis, xyz[mask])
 
-                    # convert back to global time
-                    r_min = np.append(r_min,r_min[-1]/self._z_scale)
-                    r_max = np.append(r_max,r_max[-1]/self._z_scale)
+                # convert back to global time
+                r_min = np.append(r_min,r_min[-1]/self._z_scale)
+                r_max = np.append(r_max,r_max[-1]/self._z_scale)
 
-                    event_tracks[-1].append(dict(
-                            track_id=track_id,
-                            mask=mask,
-                            centroid=centroid,
-                            axis=axis,
-                            residual=residual,
-                            length=np.linalg.norm(r_max[:3]-r_min[:3]),
-                            start=r_min,
-                            end=r_max,
-                            t0=t0
-                        ))
-                    iter_mask[mask] = 0
+#                 event_tracks[-1].append(dict(
+                event_tracks.append(dict(
+                        track_id=track_id,
+                        mask=mask,
+                        centroid=centroid,
+                        axis=axis,
+                        residual=residual,
+                        length=np.linalg.norm(r_max[:3]-r_min[:3]),
+                        start=r_min,
+                        end=r_max,
+                        t0=t0
+                    ))
+                iter_mask[mask] = 0
 
-                if np.all(track_ids == -1) or not np.any(iter_mask): break
+            if np.all(track_ids == -1) or not np.any(iter_mask): break
         return event_tracks
 
     def _projected_limits(self, centroid, axis, xyz):
@@ -253,7 +269,7 @@ class LArPixEVDFile(object):
             ('hid', 'i8'),
             ('px', 'f8'), ('py', 'f8'), ('ts', 'i8'), ('q', 'f8'),
             ('iochain', 'i8'), ('chipid', 'i8'), ('channelid', 'i8'),
-            ('geom', 'i8'), ('event_ref', region_ref), ('track_ref', region_ref)],
+            ('geom', 'i8'), ('event_ref', region_ref)],
         'events' : [
             ('evid', 'i8'), ('track_ref', region_ref), ('hit_ref', region_ref),
             ('nhit', 'i8'), ('q', 'f8'), ('ts_start', 'i8'), ('ts_end', 'i8'),
@@ -276,15 +292,20 @@ class LArPixEVDFile(object):
 
     def __init__(self, filename, source_file=None, configuration_file=None, geometry_file=None,
                  pedestal_file=None, builder_config=None, fitter_config=None, buffer_len=1024,
-                 verbose=False, fit_tracks=True, trigger_finder_config=None, find_triggers=True):
+                 verbose=False, fit_tracks=True, trigger_finder_config=None, find_triggers=True,
+                 cores=2, force=False):
         self.verbose = verbose
         self.is_open = True
-        if os.path.exists(filename):
+        if os.path.exists(filename) and not force:
             raise OSError('{} exists!'.format(filename))
+        elif os.path.exists(filename):
+            print('deleting existing file {}...'.format(filename))
+            os.remove(filename)
         self.h5_filename = filename
         self.out_buffer = list()
         self.buffer_len = buffer_len
         self.fit_tracks = fit_tracks
+        self.cores = cores
 
         self.geometry = defaultdict(self._default_pxy)
         self.geometry_file = geometry_file
@@ -324,8 +345,10 @@ class LArPixEVDFile(object):
         trigger_finder_config = trigger_finder_config if trigger_finder_config else dict()
         self.trigger_finder = ExternalTriggerFinder(**trigger_finder_config)
 
-        self._queue  = queue.Queue()
-        self._outfile_worker = multiprocessing.Process(target=self._parse_events_array)
+        self._queue  = queue.Queue(4)
+#         self._outfile_worker = multiprocessing.Process(target=self._parse_events_array)
+        self._outfile_worker = threading.Thread(target=self._parse_events_array)
+#         self._outfile_worker = NonThread(target=self._parse_events_array)
 
         self._create_datasets()
         self._write_metadata(dict(
@@ -345,12 +368,14 @@ class LArPixEVDFile(object):
         if len(self.out_buffer) >= self.buffer_len:
             self.flush()
 
-    def flush(self, block=False):
+    def flush(self, block=True):
         if not len(self.out_buffer):
             return
         self._queue.put(self.out_buffer)
         if not self._outfile_worker.is_alive():
-            self._outfile_worker = multiprocessing.Process(target=self._parse_events_array)
+#             self._outfile_worker = multiprocessing.Process(target=self._parse_events_array)
+            self._outfile_worker = threading.Thread(target=self._parse_events_array)
+#             self._outfile_worker = NonThread(target=self._parse_events_array)
             self._outfile_worker.start()
         if block:
             self._outfile_worker.join()
@@ -399,8 +424,12 @@ class LArPixEVDFile(object):
                 events_list = [event[hit_mask] for event,hit_mask in zip(events_list,hit_masks)]
 
                 # run track fitting
-                tracks_list = self.track_fitter.fit(events_list, self.geometry, trigs_list=trigs_list) \
-                    if self.fit_tracks else [list() for i in range(len(events_list))]
+                with multiprocessing.Pool(self.cores) as p:
+#                     tracks_list = self.track_fitter.fit(events_list, self.geometry, trigs_list=trigs_list) \
+#                         if self.fit_tracks else [list() for i in range(len(events_list))]
+                    tracks_list = p.starmap(self.track_fitter.fit, [(ev, self.geometry, trigs_list[i]) \
+                            for i,ev in enumerate(events_list)]) \
+                        if self.fit_tracks else [list() for i in range(len(events_list))]
 
                 # resize datasets
                 events_dset    = h5_file['events']
@@ -445,7 +474,6 @@ class LArPixEVDFile(object):
                     if len(event):
                         hits_dict['hid']       = hits_idx + np.arange(len(event))
                         hits_dict['ts']        = event['timestamp']
-                        hits_dict['q']         = np.zeros(len(event))
                         hits_dict['iochain']   = event['io_channel']
                         hits_dict['chipid']    = event['chip_id']
                         hits_dict['channelid'] = event['channel_id']
@@ -454,15 +482,11 @@ class LArPixEVDFile(object):
                                     + event['io_channel'].astype(int))*256 \
                                 + event['chip_id'].astype(int))*64 \
                             + event['channel_id'].astype(int)
-                        xy   = np.zeros((len(event),2))
-                        vref = np.zeros(len(event))
-                        vcm  = np.zeros(len(event))
-                        ped  = np.zeros(len(event))
-                        for i,unique_id in enumerate(hit_uniqueid):
-                            xy[i]   = self.geometry[((unique_id//64)%256,unique_id%64)]
-                            vref[i] = self.configuration[str(unique_id)]['vref_mv']
-                            vcm[i]  = self.configuration[str(unique_id)]['vcm_mv']
-                            ped[i]  = self.pedestal[str(unique_id)]['pedestal_mv']
+                        hit_uniqueid_str = hit_uniqueid.astype(str)
+                        xy   = np.array([self.geometry[((unique_id//64)%256,unique_id%64)] for unique_id in hit_uniqueid])
+                        vref = np.array([self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
+                        vcm  = np.array([self.configuration[unique_id]['vcm_mv'] for unique_id in hit_uniqueid_str])
+                        ped  = np.array([self.pedestal[unique_id]['pedestal_mv'] for unique_id in hit_uniqueid_str])
                         hits_dict['px'] = xy[:,0]
                         hits_dict['py'] = xy[:,1]
                         q = event['dataword']/256. * (vref-vcm) + vcm - ped
@@ -520,7 +544,6 @@ class LArPixEVDFile(object):
                         tracks_dict['hit_ref']   = np.array([hits_dset.regionref[hits_dict['hid'][track['mask']]] for track in tracks])
                     if len(event):
                         hits_dict['event_ref'] = np.array([event_ref]*len(event))
-                        hits_dict['track_ref'] = np.array([tracks_dset.regionref[[tracks_dict['track_id'][j] for j in range(len(tracks)) if tracks[j]['mask'][i]]] for i in range(len(event))])
 
                     self._fill(events_dset, events_idx, 1, **events_dict)
                     self._fill(ext_trigs_dset, ext_trigs_idx, len(trigs), **ext_trigs_dict)
