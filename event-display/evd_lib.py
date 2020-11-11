@@ -1,5 +1,4 @@
 import h5py
-import multiprocessing
 import threading
 import os
 import numpy as np
@@ -25,8 +24,39 @@ class NonThread(object):
     
     def is_alive(self):
         return False
+    
+class keydefaultdict(defaultdict):
+    def __missing__(self,key):
+        rv = self[key] = self.default_factory(key)
+        return rv 
 
 class ExternalTriggerFinder(object):
+    '''
+    A class to extract external triggers from packet arrays
+    
+    This class has two parameters: `pacman_trigger_enabled` and `larpix_trigger_channels`
+    
+    The parameter `pacman_trigger_enabled` configures the `ExternalTriggerFinder` to
+    extract packets of `packet_type == 7` as external triggers
+    
+    The parameter `larpix_trigger_channels` configures the `ExternalTriggerFinder` to
+    extract triggers on particular larpix channels as external triggers. To specify,
+    this parameter should be a dict of `<chip-key>: [<channel id>]` pairs. A special
+    chip key of `'All'` can be used in the event that all triggers on a particular
+    channel of any chip key should be extracted as external triggers.
+    
+    You can access and set the parameters at initialization::
+    
+        etf = ExternalTriggerFinder(pacman_trigger_enabled=True, larpix_trigger_channels=dict())
+        
+    or via the getter/setters::
+    
+        etf.get_parameters() # dict(pacman_trigger_enabled=True, larpix_trigger_channels=dict())
+        etf.get_parameters('pacman_trigger_enabled') # dict(pacman_trigger_enabled=True)
+        
+        etf.set_parameters(pacman_trigger_enabled=True, larpix_trigger_channels={'1-1-1':[0]})
+    
+    '''
     def __init__(self, pacman_trigger_enabled=True, larpix_trigger_channels=None):
         if larpix_trigger_channels is None:
             larpix_trigger_channels = dict()
@@ -45,7 +75,18 @@ class ExternalTriggerFinder(object):
         self._pacman_trigger_enabled = kwargs.get('pacman_trigger_enabled',self._pacman_trigger_enabled)
         self._larpix_trigger_channels = kwargs.get('larpix_trigger_channels',self._larpix_trigger_channels)
 
-    def fit(self, events):
+    def fit(self, events, metadata=None):
+        '''
+        Pull external triggers from hit data within each event. No metadata is used.
+        
+        Trigger types are inherited from the pacman trigger type bits (with 
+        `pacman_trigger_enabled`) or are given a value of `-1` for larpix external triggers.
+        
+        :returns: a list of a list of dicts (one list for each event), each dict describes a single external trigger with the following keys: `ts`-trigger timestamp, `type`-trigger type, `mask`-mask for which packets within the event are included in the trigger
+        
+        '''
+        if metadata is None:
+            metadata = list()
         event_trigs = list()
         for event in events:
             event_trigs.append(list())
@@ -53,6 +94,7 @@ class ExternalTriggerFinder(object):
             if self._pacman_trigger_enabled:
                 # first check for any pacman trigger packets
                 trigger_mask = event['packet_type'] == 7
+                trigger_mask[trigger_mask] = ((event['trigger_type'][trigger_mask] >> 1) & 1).astype(bool)
                 if np.any(trigger_mask) > 0:
                     for i,trigger in enumerate(event[trigger_mask]):
                         mask = np.zeros(len(event))
@@ -94,6 +136,21 @@ class ExternalTriggerFinder(object):
         return event_trigs
 
 class TrackFitter(object):
+    '''
+    A class to extract tracks from packet arrays
+    
+    You can access and set the parameters at initialization::
+    
+        tf = TrackFitter(vd=1.648, clock_period=0.1, ...)
+        
+    or via the getter/setters::
+    
+        tf.get_parameters() # dict(vd=1.648, clock_period=0.1, ...)
+        tf.get_parameters('vd') # dict(vd=1.648)
+        
+        tf.set_parameters(vd=1.7)
+    
+    '''
     def __init__(self, dbscan_eps=14, dbscan_min_samples=5, vd=1.648, clock_period=0.1,
                  ransac_min_samples=2, ransac_residual_threshold=8, ransac_max_trials=100):
         self._vd = vd
@@ -108,11 +165,6 @@ class TrackFitter(object):
         self.pca = dcomp.PCA(n_components=1)
 
     def get_parameters(self, *args):
-        '''
-        Return ``dict`` of specified named parameters and values, if none specified,
-        return all parameters
-
-        '''
         rv = dict()
         for key in ('vd','clock_period','z_scale',
                     'dbscan_eps','dbscan_min_samples',
@@ -125,10 +177,15 @@ class TrackFitter(object):
         '''
         Sets parameters used in fitting tracks::
 
-            vd: drift velocity [mm/us]
-            clock_period: clock period for timestamp [us]
-            dbscan_eps: epsilon used for clustering [mm]
-            dbscan_min_samples: min samples used for clustering
+            vd:                        drift velocity [mm/us]
+            clock_period:              clock period for timestamp [us]
+            
+            dbscan_eps:                epsilon used for clustering [mm]
+            dbscan_min_samples:        min samples used for clustering
+            
+            ransac_min_samples:        min samples used for outlier detection
+            ransac_residual_threshold: residual threshold used for outlier detection [mm]
+            ransac_max_trials:         max trials used for outlier detection
 
         '''
         self._vd = kwargs.get('vd',self._vd)
@@ -181,14 +238,28 @@ class TrackFitter(object):
         axis = pca.components_[0] / np.linalg.norm(pca.components_[0])
         return centroid, axis
 
-    def fit(self, event, geometry, trigs=None, plot=False):
-        event_tracks = list()
-        if trigs is None: trigs = list()
+    def fit(self, event, metadata=None, plot=False):
+        '''
+        Extract tracks from a given event packet array
+        
+        Accepts geometry metadata and external trigger metadata (optional).
+        Geometry should be specified as a dict of `(chip_id, channel_id)` pairs,
+        and external triggers should be specified with a list of dicts containing
+        `type` and `ts` keys.
+        
+        :returns: list of dicts (one for each track) containing keys: `track_id`-unique id within event, `mask`-mask for which packets are included in track, `centroid`-x,y,z centroid of track relative to `t0`, `axis`-track x,y,z axis, `residual`-x,y,z residuals, `length`-track length, `start`-x,y,z,t of track start point, `end`-x,y,z,t of track end point, `t0`-t0 timestamp used for track
+        
+        '''
+        if metadata is None:
+            metadata = dict()
+        trigs    = metadata.get('trigs',list())
+        geometry = metadata.get('geometry',dict())
 #         if trigs_list is None:
 #             trigs_list = [list()]*len(events)
 #         for event,trigs in zip(events,trigs_list):
 #             event_tracks.append(list())
         if not len(geometry.keys()): return list()#continue
+        event_tracks = list()
         if len(event) < 2: return list()#continue
         if trigs:
             t0 = np.min([trig['ts'] for trig in trigs]).astype(int)
@@ -269,18 +340,22 @@ class LArPixEVDFile(object):
             ('hid', 'i8'),
             ('px', 'f8'), ('py', 'f8'), ('ts', 'i8'), ('q', 'f8'),
             ('iochain', 'i8'), ('chipid', 'i8'), ('channelid', 'i8'),
-            ('geom', 'i8'), ('event_ref', region_ref)],
+            ('geom', 'i8'), ('event_ref', region_ref), ('q_raw', 'f8')
+        ],
         'events' : [
             ('evid', 'i8'), ('track_ref', region_ref), ('hit_ref', region_ref),
             ('nhit', 'i8'), ('q', 'f8'), ('ts_start', 'i8'), ('ts_end', 'i8'),
-            ('ntracks', 'i8'), ('ext_trig_ref', region_ref), ('n_ext_trigs', 'i8')],
+            ('ntracks', 'i8'), ('ext_trig_ref', region_ref), ('n_ext_trigs', 'i8'),
+            ('unix_ts', 'u8'), ('q_raw', 'f8')
+        ],
         'tracks' : [
             ('track_id','i8'), ('event_ref', region_ref), ('hit_ref', region_ref),
             ('theta', 'f8'), ('t0', 'i8'),
             ('phi', 'f8'), ('xp', 'f8'), ('yp', 'f8'), ('nhit', 'i8'),
             ('q', 'f8'), ('ts_start', 'i8'), ('ts_end', 'i8'),
             ('residual', 'f8', (3,)), ('length', 'f8'), ('start', 'f8', (4,)),
-            ('end', 'f8', (4,))],
+            ('end', 'f8', (4,)), ('q_raw', 'f8')
+        ],
         'ext_trigs' : [
             ('trig_id', 'i8'), ('event_ref', region_ref), ('ts', 'i8'), ('type', 'u1')
         ]
@@ -291,9 +366,9 @@ class LArPixEVDFile(object):
         return (0.,0.)
 
     def __init__(self, filename, source_file=None, configuration_file=None, geometry_file=None,
-                 pedestal_file=None, builder_config=None, fitter_config=None, buffer_len=1024,
+                 pedestal_file=None, builder_config=None, fitter_config=None, buffer_len=128,
                  verbose=False, fit_tracks=True, trigger_finder_config=None, find_triggers=True,
-                 cores=2, force=False):
+                 cores=1, force=False, electron_lifetime_file=None):
         self.verbose = verbose
         self.is_open = True
         if os.path.exists(filename) and not force:
@@ -307,6 +382,7 @@ class LArPixEVDFile(object):
         self.fit_tracks = fit_tracks
         self.cores = cores
 
+        # geometry lookup
         self.geometry = defaultdict(self._default_pxy)
         self.geometry_file = geometry_file
         if geometry_file is not None:
@@ -317,8 +393,9 @@ class LArPixEVDFile(object):
                     if pixel_id is not None:
                         self.geometry[(chip,channel)] = geo['pixels'][pixel_id][1:3]
 
+        # pedestal lookup
         self.pedestal = defaultdict(lambda: dict(
-            pedestal_mv=550
+            pedestal_mv=580
             ))
         self.pedestal_file = pedestal_file
         if pedestal_file is not None:
@@ -326,17 +403,32 @@ class LArPixEVDFile(object):
                 for key,value in json.load(infile).items():
                     self.pedestal[key] = value
 
+        # chip configuration lookup
         self.configuration = defaultdict(lambda: dict(
-            vref_mv=1500,
-            vcm_mv=550
+            vref_mv=1300,
+            vcm_mv=288
             ))
-
         self.configuration_file = configuration_file
         if configuration_file is not None:
             with open(self.configuration_file,'r') as infile:
                 for key,value in json.load(infile).items():
                     self.configuration[key] = value
-
+                    
+        # electron lifetime lookup
+        self.electron_lifetime_f = lambda unix,ts: 1.
+        self.electron_lifetime_file = electron_lifetime_file
+        if electron_lifetime_file is not None and fitter_config:
+            if electron_lifetime_file[-5:] == '.root':
+                import ROOT
+                infile = ROOT.TFile(self.electron_lifetime_file,'r')
+                tg = infile.Get('lifetime')
+                lt_unix = np.array([x for x in tg.GetX()])
+                lt_tau = np.array([y for y in tg.GetY()]) * 1e3 / (fitter_config.get('clock_period',0.1)) # convert from ms to clock ticks
+                self.electron_lifetime_f = lambda unix,ts: np.exp(ts.astype(float)/np.interp(unix.astype(float), lt_unix, lt_tau))
+                infile.Close()
+            else:
+                self.electron_lifetime_file = None
+                    
         self.source_file = source_file
 
         fitter_config = fitter_config if fitter_config else dict()
@@ -345,10 +437,10 @@ class LArPixEVDFile(object):
         trigger_finder_config = trigger_finder_config if trigger_finder_config else dict()
         self.trigger_finder = ExternalTriggerFinder(**trigger_finder_config)
 
-        self._queue  = queue.Queue(4)
+        self._queue  = queue.Queue(2)
 #         self._outfile_worker = multiprocessing.Process(target=self._parse_events_array)
-        self._outfile_worker = threading.Thread(target=self._parse_events_array)
-#         self._outfile_worker = NonThread(target=self._parse_events_array)
+#         self._outfile_worker = threading.Thread(target=self._parse_events_array)
+        self._outfile_worker = NonThread(target=self._parse_events_array)
 
         self._create_datasets()
         self._write_metadata(dict(
@@ -356,15 +448,16 @@ class LArPixEVDFile(object):
                 source_file=self.source_file,
                 configuration_file=self.configuration_file if self.configuration_file else '',
                 pedestal_file=self.pedestal_file if self.pedestal_file else '',
-                geometry_file=self.geometry_file if self.geometry_file else ''
+                geometry_file=self.geometry_file if self.geometry_file else '',
+                electron_lifetime_file=self.electron_lifetime_file if self.electron_lifetime_file else ''
             ),
             hits=dict(),
             events=builder_config if builder_config else dict(),
             tracks=self.track_fitter.get_parameters() if self.fit_tracks else dict()
         ))
 
-    def append(self, event_array):
-        self.out_buffer.append(event_array)
+    def append(self, event_array, unix_timestamp=0):
+        self.out_buffer.append((event_array,unix_timestamp))
         if len(self.out_buffer) >= self.buffer_len:
             self.flush()
 
@@ -374,8 +467,8 @@ class LArPixEVDFile(object):
         self._queue.put(self.out_buffer)
         if not self._outfile_worker.is_alive():
 #             self._outfile_worker = multiprocessing.Process(target=self._parse_events_array)
-            self._outfile_worker = threading.Thread(target=self._parse_events_array)
-#             self._outfile_worker = NonThread(target=self._parse_events_array)
+#             self._outfile_worker = threading.Thread(target=self._parse_events_array)
+            self._outfile_worker = NonThread(target=self._parse_events_array)
             self._outfile_worker.start()
         if block:
             self._outfile_worker.join()
@@ -406,16 +499,19 @@ class LArPixEVDFile(object):
 
     def _parse_events_array(self):
         last = time.time()
-        while not self._queue.empty():
-            events_list = list()
-            try:
-                events_list = self._queue.get(timeout=1)
-            except queue.Empty:
-                break
-            if self.verbose and time.time() > last+1:
-                print('{} chunks remaining...\r'.format(self._queue.qsize()), end='')
-                last = time.time()
-            with h5py.File(self.h5_filename,'a') as h5_file:
+        with h5py.File(self.h5_filename,'a') as h5_file:
+            while not self._queue.empty():
+                data_list = list()
+                try:
+                    data_list = self._queue.get(timeout=1)
+                except queue.Empty:
+                    break
+                if self.verbose and time.time() > last+1:
+                    print('{} chunks remaining...\r'.format(self._queue.qsize()), end='')
+                    last = time.time()
+
+                events_list,unix_timestamps = zip(*data_list)
+
                 # remove external triggers from events
                 trigs_list = self.trigger_finder.fit(events_list)
                 hit_masks   = [~np.logical_or.reduce([trig['mask'] for trig in trigs])
@@ -424,12 +520,13 @@ class LArPixEVDFile(object):
                 events_list = [event[hit_mask] for event,hit_mask in zip(events_list,hit_masks)]
 
                 # run track fitting
-                with multiprocessing.Pool(self.cores) as p:
-#                     tracks_list = self.track_fitter.fit(events_list, self.geometry, trigs_list=trigs_list) \
-#                         if self.fit_tracks else [list() for i in range(len(events_list))]
-                    tracks_list = p.starmap(self.track_fitter.fit, [(ev, self.geometry, trigs_list[i]) \
-                            for i,ev in enumerate(events_list)]) \
-                        if self.fit_tracks else [list() for i in range(len(events_list))]
+#                 with multiprocessing.Pool(self.cores) as p:
+    #                     tracks_list = self.track_fitter.fit(events_list, self.geometry, trigs_list=trigs_list) \
+    #                         if self.fit_tracks else [list() for i in range(len(events_list))]
+                tracks_list = [self.track_fitter.fit(
+                            ev, dict(geometry=self.geometry, trigs=trigs_list[i])) \
+                        for i,ev in enumerate(events_list)] \
+                    if self.fit_tracks else [list() for i in range(len(events_list))]
 
                 # resize datasets
                 events_dset    = h5_file['events']
@@ -445,17 +542,19 @@ class LArPixEVDFile(object):
                 hits_dset.resize(hits_dset.shape[0] + np.sum([len(event) for event in events_list]), axis=0)
                 ext_trigs_dset.resize(ext_trigs_dset.shape[0] + np.sum([len(trigs) for trigs in trigs_list]), axis=0)
 
-                for event,tracks,trigs in zip(events_list,tracks_list,trigs_list):
+                for unix_ts,event,tracks,trigs in zip(unix_timestamps,events_list,tracks_list,trigs_list):
                     events_dict    = defaultdict(int)
                     tracks_dict    = defaultdict(int)
                     hits_dict      = defaultdict(int)
                     ext_trigs_dict = defaultdict(int)
                     # create event info
+                    events_dict['unix_ts']     = np.array([unix_ts])
                     events_dict['nhit']        = np.array([len(event)])
                     events_dict['ntracks']     = np.array([len(tracks)])
                     events_dict['n_ext_trigs'] = np.array([len(trigs)])
                     events_dict['evid']        = np.array([events_idx])
                     events_dict['q']           = np.array([0.])
+                    events_dict['q_raw']       = np.array([0.])
                     if len(event) and len(trigs):
                         events_dict['ts_start'] = np.array([min(event[0]['timestamp'],trigs[0]['ts'])])
                         events_dict['ts_end']   = np.array([min(event[-1]['timestamp'],trigs[-1]['ts'])])
@@ -489,12 +588,14 @@ class LArPixEVDFile(object):
                         ped  = np.array([self.pedestal[unique_id]['pedestal_mv'] for unique_id in hit_uniqueid_str])
                         hits_dict['px'] = xy[:,0]
                         hits_dict['py'] = xy[:,1]
-                        q = event['dataword']/256. * (vref-vcm) + vcm - ped
-                        hits_dict['q']  = q
+                        q_raw = event['dataword']/256. * (vref-vcm) + vcm - ped
+                        hits_dict['q_raw'] = q_raw
+                        hits_dict['q']     = q_raw
                     # create track info
                     if len(tracks):
                         tracks_dict['track_id']    = tracks_idx + np.arange(len(tracks)).astype(int)
                         tracks_dict['nhit']        = np.zeros((len(tracks),))
+                        tracks_dict['q_raw']       = np.zeros((len(tracks),))
                         tracks_dict['q']           = np.zeros((len(tracks),))
                         tracks_dict['ts_start']    = np.zeros((len(tracks),))
                         tracks_dict['ts_end']      = np.zeros((len(tracks),))
@@ -508,7 +609,14 @@ class LArPixEVDFile(object):
                         tracks_dict['end']         = np.zeros((len(tracks),4))
                         tracks_dict['t0']          = np.zeros((len(tracks),))
                         for i,track in enumerate(tracks):
+                            tracks_dict['t0'][i]        = track['t0']
                             tracks_dict['nhit'][i]      = np.sum(track['mask'])
+                            tracks_dict['q_raw'][i]     = np.sum(hits_dict['q_raw'][track['mask']])
+                            hits_dict['q'][track['mask']] = hits_dict['q_raw'][track['mask']] \
+                                * self.electron_lifetime_f(
+                                    events_dict['unix_ts'],
+                                    hits_dict['ts'][track['mask']] - track['t0']
+                                )
                             tracks_dict['q'][i]         = np.sum(hits_dict['q'][track['mask']])
                             tracks_dict['theta'][i]     = self.track_fitter.theta(track['axis'])
                             tracks_dict['phi'][i]       = self.track_fitter.phi(track['axis'])
@@ -521,12 +629,11 @@ class LArPixEVDFile(object):
                             tracks_dict['length'][i]    = track['length']
                             tracks_dict['ts_start'][i]  = hits_dict['ts'][track['mask']][0]
                             tracks_dict['ts_end'][i]    = hits_dict['ts'][track['mask']][-1]
-                            tracks_dict['t0'][i]        = track['t0']
 
                     # calculate hit level info for events
                     if len(event):
-                        q_sum = np.sum(hits_dict['q'])
-                        events_dict['q'] = np.array([q_sum])
+                        events_dict['q_raw'] = np.array([np.sum(hits_dict['q_raw'])])
+                        events_dict['q']     = np.array([np.sum(hits_dict['q'])])
 
                     # create references
                     event_ref    = events_dset.regionref[events_idx]
