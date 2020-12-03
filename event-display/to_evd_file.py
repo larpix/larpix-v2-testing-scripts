@@ -115,6 +115,10 @@ def main(in_filename, out_filename, *args,
     mask = np.logical_or(mask,timestamp_packet_mask)
     if 'pacman_trigger_enabled' in external_trigger_conf and external_trigger_conf['pacman_trigger_enabled']:
         mask = np.logical_or(mask,trigger_packet_mask)
+    del good_parity_mask
+    del data_packet_mask
+    del trigger_packet_mask
+    del sync_packet_mask
 
     n_packets      = int(np.sum(mask))
     start_idx      = 0
@@ -123,6 +127,7 @@ def main(in_filename, out_filename, *args,
     unix_ts_buffer = np.array([],dtype=packets.dtype)
     start_time     = time.time()
     last_unix_ts   = np.array(packets[timestamp_packet_mask][0],dtype=packets.dtype)
+    del timestamp_packet_mask
     while start_idx < n_packets and (max_packets < 0 or start_idx < max_packets):
         # load a buffer of data
         packet_buffer = np.copy(packets[mask][start_idx:min(end_idx,n_packets)])
@@ -133,7 +138,7 @@ def main(in_filename, out_filename, *args,
         ts_grps = np.split(packet_buffer, np.argwhere(ts_mask).flatten())
         unix_ts = np.concatenate([[ts_grp[0]]*len(ts_grp[1:]) for ts_grp in ts_grps if len(ts_grp) > 1], axis=0)
         packet_buffer = packet_buffer[~ts_mask]
-        packet_buffer['timestamp'] = packet_buffer['timestamp'].astype(int) % np.power(2,31) # ignore 32nd bit from pacman triggers
+        packet_buffer['timestamp'] = packet_buffer['timestamp'].astype(int) % (2**31) # ignore 32nd bit from pacman triggers
         last_unix_ts = unix_ts[-1]
 
         # sort packets to fix 512 bug
@@ -145,12 +150,14 @@ def main(in_filename, out_filename, *args,
         packet_dt = packet_buffer['timestamp'][1:] - packet_buffer['timestamp'][:-1]
         if len(event_buffer):
             packet_dt = np.insert(packet_dt, [0], packet_buffer['timestamp'][0] - event_buffer[-1]['timestamp'].astype(int))
-        event_idx     = np.argwhere(np.abs(packet_dt) > event_dt).flatten() + 1
+        else:
+            packet_dt = np.insert(packet_dt, [0], 0)
+        event_idx     = np.argwhere(np.abs(packet_dt) > event_dt).flatten()
         events        = np.split(packet_buffer, event_idx)
         event_unix_ts = np.split(unix_ts, event_idx)
         
         for idx, event, unix_ts in zip(event_idx, events[:-1], event_unix_ts[:-1]):
-            if idx == 1:
+            if idx == 0:
                 while len(event_buffer) >= nhit_cut:
                     # current event buffer is a complete event
                     _,event_buffer,__,unix_ts_buffer = add_event(

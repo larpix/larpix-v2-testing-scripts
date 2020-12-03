@@ -176,7 +176,7 @@ def generate_plots(event, f, geom=[], fig=None, binned_3d=False):
     y = hits[hit_ref]['py']
     z = hits[hit_ref]['ts'] - event['ts_start']
     q = hits[hit_ref]['q'] * 0.250
-
+    
     if not fig:
         fig = plt.figure(name,figsize=(8,6))
 
@@ -190,6 +190,7 @@ def generate_plots(event, f, geom=[], fig=None, binned_3d=False):
         unassoc_hit_mask = np.ones(event['nhit']).astype(bool)
         for i,track in enumerate(tracks[track_ref]):
             hit_ref = track['hit_ref']
+            print('track {}\tlength: {:0.01f}mm\tevent frac: {:0.02f}\tnhit {}'.format(i,track['length'],track['nhit']/event['nhit'],track['nhit']))
             fig = line3d(hits[hit_ref]['px'], hits[hit_ref]['py'], hits[hit_ref]['ts']-event['ts_start'], *geom, edgecolors=hits[hit_ref]['q'], c='C{}'.format(i+1), name=name, fig=fig, points=True)
             fig = line3d((track_start[i,0],track_end[i,0]), (track_start[i,1],track_end[i,1]), (track_start[i,2],track_end[i,2]), *geom, name=name, fig=fig, c='C{}'.format(i+1))
             unassoc_hit_mask[np.in1d(hits[event['hit_ref']]['hid'],hits[hit_ref]['hid'])] = 0
