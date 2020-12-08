@@ -5,6 +5,14 @@ import time
 
 from evd_lib import *
 
+import os
+import sys
+import glob
+larpix_geometry_libpath = '/home/lhep/PACMAN/larpix-geometry/'
+evd_libpath = '/home/lhep/PACMAN/larpix-v2-testing-scripts/event-display/'
+sys.path.append(larpix_geometry_libpath)
+sys.path.append(evd_libpath)
+
 _default_geometry_file         = None
 _default_configuration_file    = None
 _default_pedestal_file         = None
@@ -31,7 +39,7 @@ def split_at_timestamp(timestamp,event,*args):
     Breaks event into two arrays at index where event['timestamp'] > timestamp
     Additional arrays can be specified with kwargs and will be split at the same
     index
-    
+
     :returns: tuple of two event halves followed by any additional arrays (in pairs)
     '''
     args = list(args)
@@ -132,7 +140,7 @@ def main(in_filename, out_filename, *args,
         # load a buffer of data
         packet_buffer = np.copy(packets[mask][start_idx:min(end_idx,n_packets)])
         packet_buffer = np.insert(packet_buffer, [0], last_unix_ts)
-        
+
         # find unix timestamp groups
         ts_mask = packet_buffer['packet_type'] == 4
         ts_grps = np.split(packet_buffer, np.argwhere(ts_mask).flatten())
@@ -155,7 +163,7 @@ def main(in_filename, out_filename, *args,
         event_idx     = np.argwhere(np.abs(packet_dt) > event_dt).flatten()
         events        = np.split(packet_buffer, event_idx)
         event_unix_ts = np.split(unix_ts, event_idx)
-        
+
         for idx, event, unix_ts in zip(event_idx, events[:-1], event_unix_ts[:-1]):
             if idx == 0:
                 while len(event_buffer) >= nhit_cut:
