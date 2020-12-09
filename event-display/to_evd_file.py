@@ -5,14 +5,6 @@ import time
 
 from evd_lib import *
 
-import os
-import sys
-import glob
-larpix_geometry_libpath = '/home/lhep/PACMAN/larpix-geometry/'
-evd_libpath = '/home/lhep/PACMAN/larpix-v2-testing-scripts/event-display/'
-sys.path.append(larpix_geometry_libpath)
-sys.path.append(evd_libpath)
-
 _default_geometry_file         = None
 _default_configuration_file    = None
 _default_pedestal_file         = None
