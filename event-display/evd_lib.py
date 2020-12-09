@@ -338,7 +338,7 @@ class LArPixEVDFile(object):
         'info' : None,
         'hits' : [
             ('hid', 'i8'),
-            ('px', 'f8'), ('py', 'f8'), ('ts', 'i8'), ('q', 'f8'),
+            ('px', 'f8'), ('py', 'f8'), ('pz', 'f8'), ('ts', 'i8'), ('q', 'f8'),
             ('iochain', 'i8'), ('chipid', 'i8'), ('channelid', 'i8'),
             ('geom', 'i8'), ('event_ref', region_ref), ('q_raw', 'f8')
         ],
@@ -588,6 +588,9 @@ class LArPixEVDFile(object):
                         ped  = np.array([self.pedestal[unique_id]['pedestal_mv'] for unique_id in hit_uniqueid_str])
                         hits_dict['px'] = xy[:,0]
                         hits_dict['py'] = xy[:,1]
+                        VD = float(str(self.track_fitter.get_parameters('vd')).split(':')[1][:-1])
+                        hits_dict['pz'] = (event['timestamp']-events_dict['ts_start'])*VD
+                        # event['timestamp'] = hit's timestamp; events_dict['ts_start'] = event's start timestamp; VD = drift velocity [cm/us]
                         q_raw = event['dataword']/256. * (vref-vcm) + vcm - ped
                         hits_dict['q_raw'] = q_raw
                         hits_dict['q']     = q_raw
