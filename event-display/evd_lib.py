@@ -15,47 +15,47 @@ region_ref = h5py.special_dtype(ref=h5py.RegionReference)
 class NonThread(object):
     def __init__(self,target):
         self.target = target
-        
+
     def start(self):
         self.target()
-        
+
     def join(self):
         pass
-    
+
     def is_alive(self):
         return False
-    
+
 class keydefaultdict(defaultdict):
     def __missing__(self,key):
         rv = self[key] = self.default_factory(key)
-        return rv 
+        return rv
 
 class ExternalTriggerFinder(object):
     '''
     A class to extract external triggers from packet arrays
-    
+
     This class has two parameters: `pacman_trigger_enabled` and `larpix_trigger_channels`
-    
+
     The parameter `pacman_trigger_enabled` configures the `ExternalTriggerFinder` to
     extract packets of `packet_type == 7` as external triggers
-    
+
     The parameter `larpix_trigger_channels` configures the `ExternalTriggerFinder` to
     extract triggers on particular larpix channels as external triggers. To specify,
     this parameter should be a dict of `<chip-key>: [<channel id>]` pairs. A special
     chip key of `'All'` can be used in the event that all triggers on a particular
     channel of any chip key should be extracted as external triggers.
-    
+
     You can access and set the parameters at initialization::
-    
+
         etf = ExternalTriggerFinder(pacman_trigger_enabled=True, larpix_trigger_channels=dict())
-        
+
     or via the getter/setters::
-    
+
         etf.get_parameters() # dict(pacman_trigger_enabled=True, larpix_trigger_channels=dict())
         etf.get_parameters('pacman_trigger_enabled') # dict(pacman_trigger_enabled=True)
-        
+
         etf.set_parameters(pacman_trigger_enabled=True, larpix_trigger_channels={'1-1-1':[0]})
-    
+
     '''
     def __init__(self, pacman_trigger_enabled=True, larpix_trigger_channels=None):
         if larpix_trigger_channels is None:
@@ -78,12 +78,12 @@ class ExternalTriggerFinder(object):
     def fit(self, events, metadata=None):
         '''
         Pull external triggers from hit data within each event. No metadata is used.
-        
-        Trigger types are inherited from the pacman trigger type bits (with 
+
+        Trigger types are inherited from the pacman trigger type bits (with
         `pacman_trigger_enabled`) or are given a value of `-1` for larpix external triggers.
-        
+
         :returns: a list of a list of dicts (one list for each event), each dict describes a single external trigger with the following keys: `ts`-trigger timestamp, `type`-trigger type, `mask`-mask for which packets within the event are included in the trigger
-        
+
         '''
         if metadata is None:
             metadata = list()
@@ -138,18 +138,18 @@ class ExternalTriggerFinder(object):
 class TrackFitter(object):
     '''
     A class to extract tracks from packet arrays
-    
+
     You can access and set the parameters at initialization::
-    
+
         tf = TrackFitter(vd=1.648, clock_period=0.1, ...)
-        
+
     or via the getter/setters::
-    
+
         tf.get_parameters() # dict(vd=1.648, clock_period=0.1, ...)
         tf.get_parameters('vd') # dict(vd=1.648)
-        
+
         tf.set_parameters(vd=1.7)
-    
+
     '''
     def __init__(self, dbscan_eps=14, dbscan_min_samples=5, vd=1.648, clock_period=0.1,
                  ransac_min_samples=2, ransac_residual_threshold=8, ransac_max_trials=100):
@@ -179,10 +179,10 @@ class TrackFitter(object):
 
             vd:                        drift velocity [mm/us]
             clock_period:              clock period for timestamp [us]
-            
+
             dbscan_eps:                epsilon used for clustering [mm]
             dbscan_min_samples:        min samples used for clustering
-            
+
             ransac_min_samples:        min samples used for outlier detection
             ransac_residual_threshold: residual threshold used for outlier detection [mm]
             ransac_max_trials:         max trials used for outlier detection
@@ -241,14 +241,14 @@ class TrackFitter(object):
     def fit(self, event, metadata=None, plot=False):
         '''
         Extract tracks from a given event packet array
-        
+
         Accepts geometry metadata and external trigger metadata (optional).
         Geometry should be specified as a dict of `(chip_id, channel_id)` pairs,
         and external triggers should be specified with a list of dicts containing
         `type` and `ts` keys.
-        
+
         :returns: list of dicts (one for each track) containing keys: `track_id`-unique id within event, `mask`-mask for which packets are included in track, `centroid`-x,y,z centroid of track relative to `t0`, `axis`-track x,y,z axis, `residual`-x,y,z residuals, `length`-track length, `start`-x,y,z,t of track start point, `end`-x,y,z,t of track end point, `t0`-t0 timestamp used for track
-        
+
         '''
         if metadata is None:
             metadata = dict()
@@ -267,8 +267,9 @@ class TrackFitter(object):
             t0 = event['timestamp'][0].astype(int)
         iter_mask = np.ones(len(event)).astype(bool)
         while True:
-            xyz = np.array([(*geometry[(chip_id, channel_id)],(ts-t0)*self._z_scale)
-                for chip_id, channel_id, ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
+            unique_id = (((event['io_group']*256 + event['io_channel'])*256 + event['chip_id'])*64 + event['channel_id']).astype(str)
+            xyz = np.array([(*geometry[id_], (ts-t0)*self._z_scale)
+                for id_, ts in zip(unique_id, event['timestamp'].astype(int))])
 
             # dbscan to find clusters
             track_ids = self._do_dbscan(xyz,iter_mask)
@@ -388,10 +389,14 @@ class LArPixEVDFile(object):
         if geometry_file is not None:
             import larpixgeometry.layouts
             geo = larpixgeometry.layouts.load(self.geometry_file) # open geometry yaml file
-            for chip, pixels in geo['chips']:
+            for chip_key, pixels in geo['chips']:
+                if not isinstance(chip_key,str):
+                    raise RuntimeError('Chip keys are not specified as str in geometry file')
                 for channel, pixel_id in enumerate(pixels):
                     if pixel_id is not None:
-                        self.geometry[(chip,channel)] = geo['pixels'][pixel_id][1:3]
+                        io_group, io_channel, chip_id = map(int,chip_key.split('-'))
+                        unique_id = ((io_group*256 + io_channel)*256 + chip_id)*64 + channel
+                        self.geometry[str(unique_id)] = geo['pixels'][pixel_id][1:3]
 
         # pedestal lookup
         self.pedestal = defaultdict(lambda: dict(
@@ -413,7 +418,7 @@ class LArPixEVDFile(object):
             with open(self.configuration_file,'r') as infile:
                 for key,value in json.load(infile).items():
                     self.configuration[key] = value
-                    
+
         # electron lifetime lookup
         self.electron_lifetime_f = lambda unix,ts: 1.
         self.electron_lifetime_file = electron_lifetime_file
@@ -428,7 +433,7 @@ class LArPixEVDFile(object):
                 infile.Close()
             else:
                 self.electron_lifetime_file = None
-                    
+
         self.source_file = source_file
 
         fitter_config = fitter_config if fitter_config else dict()
@@ -582,7 +587,7 @@ class LArPixEVDFile(object):
                                 + event['chip_id'].astype(int))*64 \
                             + event['channel_id'].astype(int)
                         hit_uniqueid_str = hit_uniqueid.astype(str)
-                        xy   = np.array([self.geometry[((unique_id//64)%256,unique_id%64)] for unique_id in hit_uniqueid])
+                        xy   = np.array([self.geometry[unique_id] for unique_id in hit_uniqueid_str])
                         vref = np.array([self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
                         vcm  = np.array([self.configuration[unique_id]['vcm_mv'] for unique_id in hit_uniqueid_str])
                         ped  = np.array([self.pedestal[unique_id]['pedestal_mv'] for unique_id in hit_uniqueid_str])
