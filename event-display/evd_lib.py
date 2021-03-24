@@ -9,6 +9,7 @@ from collections import defaultdict
 import queue
 import json
 import time
+import yaml
 
 region_ref = h5py.special_dtype(ref=h5py.RegionReference)
 
@@ -364,6 +365,11 @@ class LArPixEVDFile(object):
     @staticmethod
     def _default_pxy():
         return (0.,0.)
+    
+    @staticmethod
+    def _rotate_pixel(pixel_pos, tile_orientation):
+        return pixel_pos[0]*tile_orientation[0], pixel_pos[1]*tile_orientation[1]
+        
 
     def __init__(self, filename, source_file=None, configuration_file=None, geometry_file=None,
                  pedestal_file=None, builder_config=None, fitter_config=None, buffer_len=128,
@@ -381,17 +387,52 @@ class LArPixEVDFile(object):
         self.buffer_len = buffer_len
         self.fit_tracks = fit_tracks
         self.cores = cores
+        self.is_multi_tile = False
 
         # geometry lookup
         self.geometry = defaultdict(self._default_pxy)
         self.geometry_file = geometry_file
         if geometry_file is not None:
-            import larpixgeometry.layouts
-            geo = larpixgeometry.layouts.load(self.geometry_file) # open geometry yaml file
-            for chip, pixels in geo['chips']:
-                for channel, pixel_id in enumerate(pixels):
-                    if pixel_id is not None:
-                        self.geometry[(chip,channel)] = geo['pixels'][pixel_id][1:3]
+            with open(geometry_file) as gf:
+                geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
+
+            if 'multitile_layout_version' in geometry_yaml.keys():
+                pixel_pitch = geometry_yaml['pixel_pitch']
+                self.is_multi_tile = True
+                chip_channel_to_position = geometry_yaml['chip_channel_to_position']
+                tile_orientations = geometry_yaml['tile_orientations']
+                tile_positions = geometry_yaml['tile_positions']
+                xs = np.array(list(chip_channel_to_position.values()))[:,0] * pixel_pitch
+                ys = np.array(list(chip_channel_to_position.values()))[:,1] * pixel_pitch
+                x_size = max(xs)-min(xs)+pixel_pitch
+                y_size = max(ys)-min(ys)+pixel_pitch
+                n_pixels_per_tile = len(np.unique(xs)), len(np.unique(ys))
+                print(x_size,y_size)
+                for tile in geometry_yaml['tile_chip_to_io']:
+                    tile_orientation = tile_orientations[tile]
+                    for chip_channel in geometry_yaml['chip_channel_to_position']:
+                        chip = chip_channel // 1000
+                        channel = chip_channel % 1000
+                        io_group_io_channel = geometry_yaml['tile_chip_to_io'][tile][chip]
+                        io_group = io_group_io_channel // 1000
+                        io_channel = io_group_io_channel % 1000
+                        x = chip_channel_to_position[chip_channel][0] * pixel_pitch - x_size / 2
+                        y = chip_channel_to_position[chip_channel][1] * pixel_pitch - y_size / 2
+
+#                         x, y = self._rotate_pixel((x, y), tile_orientation)
+                        x += tile_positions[tile][2]
+                        y += tile_positions[tile][1]# - 218.236
+                        if chip == 11 and tile == 1:
+                            print(tile_positions[tile][1])
+                            print(chip, channel, x, y)
+                        self.geometry[(io_group,io_channel,chip,channel)] = x,y
+            else:
+                import larpixgeometry.layouts
+                geo = larpixgeometry.layouts.load(self.geometry_file) # open geometry yaml file
+                for chip, pixels in geo['chips']:
+                    for channel, pixel_id in enumerate(pixels):
+                        if pixel_id is not None:
+                            self.geometry[(chip,channel)] = geo['pixels'][pixel_id][1:3]
 
         # pedestal lookup
         self.pedestal = defaultdict(lambda: dict(
@@ -578,11 +619,17 @@ class LArPixEVDFile(object):
                         hits_dict['channelid'] = event['channel_id']
                         hits_dict['geom']      = np.zeros(len(event))
                         hit_uniqueid = (((event['io_group'].astype(int))*256 \
-                                    + event['io_channel'].astype(int))*256 \
-                                + event['chip_id'].astype(int))*64 \
-                            + event['channel_id'].astype(int)
+                                          + event['io_channel'].astype(int))*256 \
+                                          + event['chip_id'].astype(int))*64 \
+                                          + event['channel_id'].astype(int)
                         hit_uniqueid_str = hit_uniqueid.astype(str)
-                        xy   = np.array([self.geometry[((unique_id//64)%256,unique_id%64)] for unique_id in hit_uniqueid])
+                        if self.is_multi_tile:
+                            xy   = np.array([self.geometry[(io_group, io_channel, chip_id, channel_id)] 
+                                             for io_group, io_channel, chip_id, channel_id in zip(event['io_group'],event['io_channel'],event['chip_id'],event['channel_id'])])
+                            print(xy)
+                        else: 
+                            xy   = np.array([self.geometry[((unique_id//64)%256,unique_id%64)] for unique_id in hit_uniqueid])
+
                         vref = np.array([self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
                         vcm  = np.array([self.configuration[unique_id]['vcm_mv'] for unique_id in hit_uniqueid_str])
                         ped  = np.array([self.pedestal[unique_id]['pedestal_mv'] for unique_id in hit_uniqueid_str])

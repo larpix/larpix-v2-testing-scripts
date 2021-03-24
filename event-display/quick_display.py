@@ -54,18 +54,18 @@ def line3d(x,y,z,*geom,name=None,fig=None,points=False,c=None,edgecolors=None):
     else:
         ax = fig.add_subplot(1,2,2, projection='3d')
     if not points:
-        ax.plot(x,y,z,alpha=1,color=c)
+        ax.plot(x,z,y,alpha=1,color=c)
     else:
         norm = lambda x: np.clip((x - max(np.min(x),0.001)) / (np.max(x) - max(np.min(x),0.001)),0,1)
         cmap = plt.cm.get_cmap('plasma')
         edgecolors = cmap(norm(edgecolors))
-        ax.scatter(xyz[:,0],xyz[:,1],xyz[:,2],s=5,alpha=0.75,c=c,edgecolors=edgecolors)
+        ax.scatter(xyz[:,0],xyz[:,2],xyz[:,1],s=5,alpha=0.75,c=c,edgecolors=edgecolors)
     ax.set_xlabel('x [mm]')
-    ax.set_ylabel('y [mm]')
-    ax.set_zlabel('t [0.1us]')
-    plt.xlim(geom[0],geom[1])
-    plt.ylim(geom[2],geom[3])
-    ax.set_zlim(geom[4],geom[5])
+    ax.set_ylabel(r't [0.1 $\mathrm{\mu}$s]')
+    ax.set_zlabel('y [mm]')
+#     plt.xlim(geom[0],geom[1])
+#     plt.zlim(geom[2],geom[3])
+#     ax.set_zlim(geom[2],geom[3])
     plt.tight_layout()
 
     plt.draw()
@@ -98,9 +98,9 @@ def line2d(x,y,*geom,name=None,fig=None,color=None):
     xy = np.array(list(zip(x,y)))
 
     ax = fig.gca()
-    ax.plot(x,y,color=color)
+    ax.plot(x,y,color=color,label='Reconstructed track')
     plt.tight_layout()
-
+    plt.legend()
     plt.draw()
     return fig
 
@@ -120,18 +120,19 @@ def proj2d(x,y,q,*geom,name=None,fig=None):
     plt.tight_layout()
 
     plt.draw()
-    plt.colorbar(h[3],label='charge [ke]')
+    plt.colorbar(h[3],label=r'charge [$10^3$ e]')
     return fig
 
 def proj_time(t,q,*geom,name=None,fig=None):
     ax = fig.add_subplot(2,2,3)
     q = q+1e-9
     ax.hist(t, weights=q,
-        bins=np.linspace(geom[4],geom[5],
-                int((geom[5]-geom[4])/geom[-1])+1),
+        bins=np.linspace(0,200,
+                200),
         histtype='step', label='binned')
-    plt.xlabel('timestamp [0.1us]')
-    plt.ylabel('charge [ke]')
+    plt.xlabel(r'timestamp [0.1 $\mathrm{\mu}$s]')
+    plt.ylabel(r'charge [$10^3$ e]')
+    plt.xlim(0,200)
     plt.tight_layout()
 
     plt.draw()
@@ -142,8 +143,9 @@ def hit_times(t,q,*geom,name=None,fig=None):
     q = q+1e-9
     t,q = zip(*sorted(zip(t[t<geom[5]],q[t<geom[5]])))
     ax.plot(t,q,'r.', label='hits')
-    plt.xlabel('timestamp [0.1us]')
-    plt.ylabel('charge [ke]')
+    plt.xlabel(r'timestamp [0.1 $\mathrm{\mu}$s]')
+    plt.ylabel(r'charge [$10^3$ e]')
+    plt.xlim(0,200)
     plt.legend()
     plt.tight_layout()
 
@@ -154,7 +156,7 @@ def trig_times(t,*geom,name=None,fig=None):
     ax = fig.add_subplot(2,2,3)
     ax.axvline(t,color='g',label='trigger')
     plt.xlabel('timestamp [0.1us]')
-    plt.ylabel('charge [ke]')
+    plt.ylabel(r'charge [$10^3$ e]')
     plt.legend()
     plt.tight_layout()
 
@@ -216,6 +218,7 @@ def generate_plots(event, f, geom=[], fig=None, binned_3d=False):
         for ts in trigs[ext_trig_ref]['ts']:
             fig = trig_times(ts-event['ts_start'],*geom,name=name,fig=fig)
     fig.canvas.set_window_title(name)
+    fig.savefig("plot%i.pdf" % event['evid'])
     return fig
 
 def open_file(filename):
