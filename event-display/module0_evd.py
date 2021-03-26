@@ -8,6 +8,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d.art3d as art3d
 
+from datetime import datetime
+
 from mpl_toolkits.axes_grid1.inset_locator import InsetPosition
 
 try:
@@ -215,8 +217,9 @@ class EventDisplay:
         self.cax.cla()
         self.set_axes()
 
-        self.fig.suptitle("Event %i" % ev_id)
         event = self.events[ev_id]
+        event_datetime = datetime.utcfromtimestamp(event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
+        self.fig.suptitle("Event %i, ID %i - %s UTC" % (ev_id, event['evid'], event_datetime))
         hit_ref = event['hit_ref']
         ext_trig_ref = event['ext_trig_ref']
 
