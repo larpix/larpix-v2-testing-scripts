@@ -278,7 +278,7 @@ class TrackFitter(object):
                 xyz = np.array([(*geometry[(io_group, io_channel, chip_id, channel_id)],self._get_z_coordinate(metadata['tile_geometry'],io_group,ts-t0))
                     for io_group, io_channel, chip_id, channel_id, ts in zip(event['io_group'], event['io_channel'], event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
             else:
-                xyz = np.array([(*geometry[(chip_id, channel_id)],(ts-t0)*self._z_scale) for chip_id, channel_id, ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
+                xyz = np.array([(*geometry[(1,1,chip_id, channel_id)],(ts-t0)*self._z_scale) for chip_id, channel_id, ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
             # dbscan to find clusters
             track_ids = self._do_dbscan(xyz,iter_mask)
             if plot:
