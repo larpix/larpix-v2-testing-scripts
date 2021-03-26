@@ -411,6 +411,8 @@ class LArPixEVDFile(object):
                 chip_channel_to_position = geometry_yaml['chip_channel_to_position']
                 tile_orientations = geometry_yaml['tile_orientations']
                 tile_positions = geometry_yaml['tile_positions']
+                tpc_centers = geometry_yaml['tpc_centers']
+                tile_indeces = geometry_yaml['tile_indeces']
                 xs = np.array(list(chip_channel_to_position.values()))[:,0] * pixel_pitch
                 ys = np.array(list(chip_channel_to_position.values()))[:,1] * pixel_pitch
                 x_size = max(xs)-min(xs)+pixel_pitch
@@ -430,8 +432,8 @@ class LArPixEVDFile(object):
                         y = chip_channel_to_position[chip_channel][1] * pixel_pitch + pixel_pitch / 2 - y_size / 2
 
                         x, y = self._rotate_pixel((x, y), tile_orientation)
-                        x += tile_positions[tile][2]
-                        y += tile_positions[tile][1] - 218.236
+                        x += tile_positions[tile][2] + tpc_centers[tile_indeces[tile][1]][0]
+                        y += tile_positions[tile][1] + tpc_centers[tile_indeces[tile][1]][1]
             
                         self.geometry[(io_group,io_channel,chip,channel)] = x,y
             else:
