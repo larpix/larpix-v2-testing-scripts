@@ -492,6 +492,8 @@ class LArPixEVDFile(object):
         self._write_metadata(dict(
             info=dict(
                 source_file=self.source_file,
+                vdrift=fitter_config['vd'] if fitter_config else 1.648,
+                clock_period=fitter_config['clock_period'] if fitter_config else 0.1,
                 configuration_file=self.configuration_file if self.configuration_file else '',
                 pedestal_file=self.pedestal_file if self.pedestal_file else '',
                 geometry_file=self.geometry_file if self.geometry_file else '',
