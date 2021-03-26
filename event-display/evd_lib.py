@@ -238,6 +238,12 @@ class TrackFitter(object):
         pca = self.pca.fit(xyz[mask] - centroid)
         axis = pca.components_[0] / np.linalg.norm(pca.components_[0])
         return centroid, axis
+    
+    def _get_z_coordinate(self, tile_geometry, tile_id, time):
+        z_anode = tile_geometry[tile_id][0][0]
+        drift_direction = tile_geometry[tile_id][1][0]
+
+        return z_anode + time*self._z_scale*drift_direction
 
     def fit(self, event, metadata=None, plot=False):
         '''
@@ -268,9 +274,8 @@ class TrackFitter(object):
             t0 = event['timestamp'][0].astype(int)
         iter_mask = np.ones(len(event)).astype(bool)
         while True:
-            xyz = np.array([(*geometry[(chip_id, channel_id)],(ts-t0)*self._z_scale)
-                for chip_id, channel_id, ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
-
+            xyz = np.array([(*geometry[(io_group, io_channel, chip_id, channel_id)],self._get_z_coordinate(metadata['tile_geometry'],io_group,ts-t0))
+                for io_group, io_channel, chip_id, channel_id, ts in zip(event['io_group'], event['io_channel'], event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
             # dbscan to find clusters
             track_ids = self._do_dbscan(xyz,iter_mask)
             if plot:
@@ -340,7 +345,7 @@ class LArPixEVDFile(object):
         'hits' : [
             ('hid', 'i8'),
             ('px', 'f8'), ('py', 'f8'), ('ts', 'i8'), ('q', 'f8'),
-            ('iochain', 'i8'), ('chipid', 'i8'), ('channelid', 'i8'),
+            ('iochannel', 'i8'), ('iogroup', 'i8'), ('chipid', 'i8'), ('channelid', 'i8'),
             ('geom', 'i8'), ('event_ref', region_ref), ('q_raw', 'f8')
         ],
         'events' : [
@@ -368,7 +373,7 @@ class LArPixEVDFile(object):
     
     @staticmethod
     def _rotate_pixel(pixel_pos, tile_orientation):
-        return pixel_pos[0]*tile_orientation[0], pixel_pos[1]*tile_orientation[1]
+        return pixel_pos[0]*tile_orientation[2], pixel_pos[1]*tile_orientation[1]
         
 
     def __init__(self, filename, source_file=None, configuration_file=None, geometry_file=None,
@@ -392,6 +397,7 @@ class LArPixEVDFile(object):
         # geometry lookup
         self.geometry = defaultdict(self._default_pxy)
         self.geometry_file = geometry_file
+        self.tile_geometry = defaultdict(int)
         if geometry_file is not None:
             with open(geometry_file) as gf:
                 geometry_yaml = yaml.load(gf, Loader=yaml.FullLoader)
@@ -407,24 +413,23 @@ class LArPixEVDFile(object):
                 x_size = max(xs)-min(xs)+pixel_pitch
                 y_size = max(ys)-min(ys)+pixel_pitch
                 n_pixels_per_tile = len(np.unique(xs)), len(np.unique(ys))
-                print(x_size,y_size)
+
                 for tile in geometry_yaml['tile_chip_to_io']:
                     tile_orientation = tile_orientations[tile]
+                    self.tile_geometry[tile] = tile_positions[tile], tile_orientations[tile]
                     for chip_channel in geometry_yaml['chip_channel_to_position']:
                         chip = chip_channel // 1000
                         channel = chip_channel % 1000
                         io_group_io_channel = geometry_yaml['tile_chip_to_io'][tile][chip]
                         io_group = io_group_io_channel // 1000
                         io_channel = io_group_io_channel % 1000
-                        x = chip_channel_to_position[chip_channel][0] * pixel_pitch - x_size / 2
-                        y = chip_channel_to_position[chip_channel][1] * pixel_pitch - y_size / 2
+                        x = chip_channel_to_position[chip_channel][0] * pixel_pitch + pixel_pitch / 2 - x_size / 2
+                        y = chip_channel_to_position[chip_channel][1] * pixel_pitch + pixel_pitch / 2 - y_size / 2
 
-#                         x, y = self._rotate_pixel((x, y), tile_orientation)
+                        x, y = self._rotate_pixel((x, y), tile_orientation)
                         x += tile_positions[tile][2]
-                        y += tile_positions[tile][1]# - 218.236
-                        if chip == 11 and tile == 1:
-                            print(tile_positions[tile][1])
-                            print(chip, channel, x, y)
+                        y += tile_positions[tile][1] - 218.236
+            
                         self.geometry[(io_group,io_channel,chip,channel)] = x,y
             else:
                 import larpixgeometry.layouts
@@ -432,7 +437,7 @@ class LArPixEVDFile(object):
                 for chip, pixels in geo['chips']:
                     for channel, pixel_id in enumerate(pixels):
                         if pixel_id is not None:
-                            self.geometry[(chip,channel)] = geo['pixels'][pixel_id][1:3]
+                            self.geometry[(1,1,chip,channel)] = geo['pixels'][pixel_id][1:3]
 
         # pedestal lookup
         self.pedestal = defaultdict(lambda: dict(
@@ -565,7 +570,7 @@ class LArPixEVDFile(object):
     #                     tracks_list = self.track_fitter.fit(events_list, self.geometry, trigs_list=trigs_list) \
     #                         if self.fit_tracks else [list() for i in range(len(events_list))]
                 tracks_list = [self.track_fitter.fit(
-                            ev, dict(geometry=self.geometry, trigs=trigs_list[i])) \
+                            ev, dict(geometry=self.geometry, trigs=trigs_list[i], tile_geometry=self.tile_geometry)) \
                         for i,ev in enumerate(events_list)] \
                     if self.fit_tracks else [list() for i in range(len(events_list))]
 
@@ -614,7 +619,8 @@ class LArPixEVDFile(object):
                     if len(event):
                         hits_dict['hid']       = hits_idx + np.arange(len(event))
                         hits_dict['ts']        = event['timestamp']
-                        hits_dict['iochain']   = event['io_channel']
+                        hits_dict['iogroup']   = event['io_group']
+                        hits_dict['iochannel']   = event['io_channel']
                         hits_dict['chipid']    = event['chip_id']
                         hits_dict['channelid'] = event['channel_id']
                         hits_dict['geom']      = np.zeros(len(event))
@@ -626,9 +632,8 @@ class LArPixEVDFile(object):
                         if self.is_multi_tile:
                             xy   = np.array([self.geometry[(io_group, io_channel, chip_id, channel_id)] 
                                              for io_group, io_channel, chip_id, channel_id in zip(event['io_group'],event['io_channel'],event['chip_id'],event['channel_id'])])
-                            print(xy)
                         else: 
-                            xy   = np.array([self.geometry[((unique_id//64)%256,unique_id%64)] for unique_id in hit_uniqueid])
+                            xy   = np.array([self.geometry[(1,1,(unique_id//64)%256,unique_id%64)] for unique_id in hit_uniqueid])
 
                         vref = np.array([self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
                         vcm  = np.array([self.configuration[unique_id]['vcm_mv'] for unique_id in hit_uniqueid_str])
