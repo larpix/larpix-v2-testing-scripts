@@ -34,6 +34,8 @@ def main(infile, vdda=_default_vdda, vref_dac=_default_vref_dac,
     total = len(unique_id_set)
     now = time.time()
     config_dict = dict()
+    dataword = f['packets'][good_data_mask]['dataword']
+
     for unique in unique_id_set:
         counter += 1
         if time.time() > now + 1:
@@ -42,7 +44,7 @@ def main(infile, vdda=_default_vdda, vref_dac=_default_vref_dac,
         vref_mv = dac2mv(vref_dac,vdda)
         vcm_mv = dac2mv(vcm_dac,vdda)
         channel_mask = unique_id == unique
-        adcs = f['packets'][good_data_mask][channel_mask]['dataword']
+        adcs = dataword[channel_mask]
         if len(adcs) < 1:
             continue
         vals,bins = np.histogram(adcs,bins=np.arange(257))
