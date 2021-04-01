@@ -66,6 +66,16 @@ class EventDisplay:
         mm2cm = 0.1
         pixel_pitch = tile_layout['pixel_pitch'] * mm2cm
         chip_channel_to_position = tile_layout['chip_channel_to_position']
+        tile_chip_to_io = tile_layout['tile_chip_to_io']
+        self.io_group_io_channel_to_tile = {}
+        for tile in tile_chip_to_io:
+            for chip in tile_chip_to_io[tile]:
+                io_group_io_channel = tile_chip_to_io[tile][chip]
+                io_group = io_group_io_channel//1000
+                io_channel = io_group_io_channel%1000
+                self.io_group_io_channel_to_tile[(io_group,io_channel)]=tile
+
+
         cm2mm = 10
 
         xs = np.array(list(chip_channel_to_position.values()))[:,0] * pixel_pitch * cm2mm
@@ -129,7 +139,8 @@ class EventDisplay:
                 print("End of file")
                 sys.exit()
 
-    def _get_z_coordinate(self, tile_id, time):
+    def _get_z_coordinate(self, io_group, io_channel, time):
+        tile_id = self.io_group_io_channel_to_tile[io_group, io_channel]
         z_anode = self.tile_positions[tile_id-1][0]
         drift_direction = self.tile_orientations[tile_id-1][0]
 
@@ -227,8 +238,9 @@ class EventDisplay:
         cmap = plt.cm.get_cmap('plasma')
         norm = matplotlib.colors.Normalize(vmin=min(self.hits[hit_ref]['q']),vmax=max(self.hits[hit_ref]['q']))
         mcharge = plt.cm.ScalarMappable(norm=norm, cmap=cmap)
-        hits_anode1 = hits[hits['iogroup'] <= 8]
-        hits_anode2 = hits[hits['iogroup'] >= 8]
+        hits_anode1 = hits[hits['iogroup'] == 1]
+        hits_anode2 = hits[hits['iogroup'] == 2]
+
         q_anode1 = hits_anode1['q'] * 0.250
         q_anode2 = hits_anode2['q'] * 0.250
         t_anode1 = hits_anode1['ts']-event['ts_start']
@@ -272,11 +284,12 @@ class EventDisplay:
                                 c='C{}'.format(i+1), alpha=0.75, lw=1)
                 hit_trk_ref = track['hit_ref']
                 hits_trk = self.hits[hit_trk_ref]
-                hits_anode1 = hits_trk[hits_trk['iogroup'] <= 8]
-                hits_anode2 = hits_trk[hits_trk['iogroup'] >= 8]
+
+                hits_anode1 = hits_trk[hits_trk['iogroup'] == 1]
+                hits_anode2 = hits_trk[hits_trk['iogroup'] == 2]
 
                 self.ax_xy.scatter(hits_trk['px'], hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
-                hitz = [self._get_z_coordinate(io_group, time) for io_group, time in zip(hits_trk['iogroup'], hits_trk['ts']-event['ts_start'])]
+                hitz = [self._get_z_coordinate(io_group, io_channel, time) for io_group, time in zip(hits_trk['iogroup'], hits_trk['iochannel'], hits_trk['ts']-event['ts_start'])]
 
                 self.ax_zy.scatter(hitz, hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
                 self.ax_xyz.scatter(hits_trk['px'], hitz, hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
@@ -289,7 +302,7 @@ class EventDisplay:
 
         if np.any(unassoc_hit_mask):
             unassoc_hits = hits[unassoc_hit_mask]
-            hitz = [self._get_z_coordinate(io_group, time) for io_group, time in zip(unassoc_hits['iogroup'], unassoc_hits['ts']-event['ts_start'])]
+            hitz = [self._get_z_coordinate(io_group, io_channel, time) for io_group, io_channel, time in zip(unassoc_hits['iogroup'], unassoc_hits['iochannel'], unassoc_hits['ts']-event['ts_start'])]
             self.ax_xyz.scatter(unassoc_hits['px'], hitz, unassoc_hits['py'], lw=0.2, ec='C0', c=cmap(norm(unassoc_hits['q'])), s=5,alpha=0.75)
             self.ax_xy.scatter(unassoc_hits['px'], unassoc_hits['py'], lw=0.2, ec='C0', c=cmap(norm(unassoc_hits['q'])), s=5,alpha=0.75)
             self.ax_zy.scatter(hitz, unassoc_hits['py'], lw=0.2, ec='C0', c=cmap(norm(unassoc_hits['q'])), s=5,alpha=0.75)
