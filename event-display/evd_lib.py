@@ -380,7 +380,7 @@ class LArPixEVDFile(object):
         
 
     def __init__(self, filename, source_file=None, configuration_file=None, geometry_file=None,
-                 pedestal_file=None, builder_config=None, fitter_config=None, buffer_len=128,
+                 pedestal_file=None, builder_config=None, fitter_config=None, buffer_len=2048,
                  verbose=False, fit_tracks=True, trigger_finder_config=None, find_triggers=True,
                  cores=1, force=False, electron_lifetime_file=None):
         self.verbose = verbose
@@ -425,17 +425,20 @@ class LArPixEVDFile(object):
                     for chip_channel in geometry_yaml['chip_channel_to_position']:
                         chip = chip_channel // 1000
                         channel = chip_channel % 1000
-                        io_group_io_channel = geometry_yaml['tile_chip_to_io'][tile][chip]
-                        io_group = io_group_io_channel // 1000
-                        io_channel = io_group_io_channel % 1000
-                        x = chip_channel_to_position[chip_channel][0] * pixel_pitch + pixel_pitch / 2 - x_size / 2
-                        y = chip_channel_to_position[chip_channel][1] * pixel_pitch + pixel_pitch / 2 - y_size / 2
+                        try:
+                            io_group_io_channel = geometry_yaml['tile_chip_to_io'][tile][chip]
+                            io_group = io_group_io_channel // 1000
+                            io_channel = io_group_io_channel % 1000
+                            x = chip_channel_to_position[chip_channel][0] * pixel_pitch + pixel_pitch / 2 - x_size / 2
+                            y = chip_channel_to_position[chip_channel][1] * pixel_pitch + pixel_pitch / 2 - y_size / 2
 
-                        x, y = self._rotate_pixel((x, y), tile_orientation)
-                        x += tile_positions[tile][2] + tpc_centers[tile_indeces[tile][1]][0]
-                        y += tile_positions[tile][1] + tpc_centers[tile_indeces[tile][1]][1]
+                            x, y = self._rotate_pixel((x, y), tile_orientation)
+                            x += tile_positions[tile][2] + tpc_centers[tile_indeces[tile][1]][0]
+                            y += tile_positions[tile][1] + tpc_centers[tile_indeces[tile][1]][1]
             
-                        self.geometry[(io_group,io_channel,chip,channel)] = x,y
+                            self.geometry[(io_group,io_channel,chip,channel)] = x,y
+                        except KeyError:
+                            print("Chip %i not present in network" % chip)
             else:
                 import larpixgeometry.layouts
                 geo = larpixgeometry.layouts.load(self.geometry_file) # open geometry yaml file
