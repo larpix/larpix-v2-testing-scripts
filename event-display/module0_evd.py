@@ -76,7 +76,6 @@ class EventDisplay:
                 io_channel = io_group_io_channel%1000
                 self.io_group_io_channel_to_tile[(io_group,io_channel)]=tile
 
-
         cm2mm = 10
 
         xs = np.array(list(chip_channel_to_position.values()))[:,0] * pixel_pitch * cm2mm
@@ -147,15 +146,11 @@ class EventDisplay:
             print("IO group %i, IO channel %i not found" % (io_group, io_channel))
             return 0
 
-        z_anode = self.tile_positions[tile_id-1][0]
-        drift_direction = self.tile_orientations[tile_id-1][0]
-
-        return z_anode + time*self.info['vdrift']*self.info['clock_period']*drift_direction
-
     def set_axes(self):
         self.ax_time_1.set_xticklabels([])
-        #self.ax_time_1.set_xlim(0,self.drift_time)
-        #self.ax_time_2.set_xlim(0,self.drift_time)
+
+        self.ax_time_1.set_xlim(0,self.drift_time)
+        self.ax_time_2.set_xlim(0,self.drift_time)
         self.ax_time_2.set_xlabel(r"timestamp [0.1 $\mathrm{\mu}$s]")
         self.ax_time_1.set_title("TPC 1",fontsize=10,x=0.5,y=0.75)
         self.ax_time_2.set_title("TPC 2",fontsize=10,x=0.5,y=0.75)
@@ -237,6 +232,7 @@ class EventDisplay:
         event = self.events[ev_id]
         event_datetime = datetime.utcfromtimestamp(event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
         self.fig.suptitle("Event %i, ID %i - %s UTC" % (ev_id, event['evid'], event_datetime))
+
         hit_ref = event['hit_ref']
         ext_trig_ref = event['ext_trig_ref']
 
@@ -326,3 +322,4 @@ class EventDisplay:
 
 if __name__ == '__main__':
     fire.Fire(EventDisplay)
+
