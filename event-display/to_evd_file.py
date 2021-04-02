@@ -135,7 +135,7 @@ def main(in_filename, out_filename, *args,
         mask = (block['valid_parity'].astype(bool) & (block['packet_type'] == 0)) # data packets
         mask = mask | (block['packet_type'] == 4) # timestamp packets
         mask = mask | ((block['packet_type'] == 7) \
-            & 'pacman_trigger_enabled' in external_trigger_conf \
+            & ('pacman_trigger_enabled' in external_trigger_conf) \
             & external_trigger_conf['pacman_trigger_enabled']) # external trigger packets
 
         packet_buffer = np.copy(block[mask])
