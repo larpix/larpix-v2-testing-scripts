@@ -7,6 +7,7 @@ import yaml
 import matplotlib
 import matplotlib.pyplot as plt
 import mpl_toolkits.mplot3d.art3d as art3d
+from matplotlib.colors import ListedColormap
 
 from datetime import datetime
 
@@ -140,7 +141,12 @@ class EventDisplay:
                 sys.exit()
 
     def _get_z_coordinate(self, io_group, io_channel, time):
-        tile_id = self.io_group_io_channel_to_tile[io_group, io_channel]
+        try:
+            tile_id = self.io_group_io_channel_to_tile[io_group, io_channel]
+        except:
+            print("IO group %i, IO channel %i not found" % (io_group, io_channel))
+            return 0
+
         z_anode = self.tile_positions[tile_id-1][0]
         drift_direction = self.tile_orientations[tile_id-1][0]
 
@@ -148,8 +154,8 @@ class EventDisplay:
 
     def set_axes(self):
         self.ax_time_1.set_xticklabels([])
-        self.ax_time_1.set_xlim(0,self.drift_time)
-        self.ax_time_2.set_xlim(0,self.drift_time)
+        #self.ax_time_1.set_xlim(0,self.drift_time)
+        #self.ax_time_2.set_xlim(0,self.drift_time)
         self.ax_time_2.set_xlabel(r"timestamp [0.1 $\mathrm{\mu}$s]")
         self.ax_time_1.set_title("TPC 1",fontsize=10,x=0.5,y=0.75)
         self.ax_time_2.set_title("TPC 2",fontsize=10,x=0.5,y=0.75)
@@ -264,8 +270,10 @@ class EventDisplay:
         self.fig.colorbar(mcharge, cax=self.cax, label=r'Charge [$10^3$] e')
 
         if event['n_ext_trigs']:
-            self.ax_time_1.axvlines(self.ext_trigs[ext_trig_ref]['ts']-event['ts_start'],c='g')
-            self.ax_time_2.axvlines(self.ext_trigs[ext_trig_ref]['ts']-event['ts_start'],c='g')
+            trig_delta = self.ext_trigs[ext_trig_ref]['ts']-event['ts_start']
+            for trig in trig_delta:
+                self.ax_time_1.axvline(x=trig,c='g')
+                self.ax_time_2.axvline(x=trig,c='g')
 
         unassoc_hit_mask = np.ones(event['nhit']).astype(bool)
 
@@ -302,10 +310,17 @@ class EventDisplay:
 
         if np.any(unassoc_hit_mask):
             unassoc_hits = hits[unassoc_hit_mask]
+            BG = np.asarray([1., 1., 1.,])
+            my_cmap = cmap(np.arange(cmap.N))
+            alphas = np.linspace(0, 1, cmap.N)
+            # Mix the colors with the background
+            for i in range(cmap.N):
+                my_cmap[i,:-1] = my_cmap[i,:-1] * alphas[i] + BG * (1.-alphas[i])
+            my_cmap = ListedColormap(my_cmap)
             hitz = [self._get_z_coordinate(io_group, io_channel, time) for io_group, io_channel, time in zip(unassoc_hits['iogroup'], unassoc_hits['iochannel'], unassoc_hits['ts']-event['ts_start'])]
-            self.ax_xyz.scatter(unassoc_hits['px'], hitz, unassoc_hits['py'], lw=0.2, ec='C0', c=cmap(norm(unassoc_hits['q'])), s=5,alpha=0.75)
-            self.ax_xy.scatter(unassoc_hits['px'], unassoc_hits['py'], lw=0.2, ec='C0', c=cmap(norm(unassoc_hits['q'])), s=5,alpha=0.75)
-            self.ax_zy.scatter(hitz, unassoc_hits['py'], lw=0.2, ec='C0', c=cmap(norm(unassoc_hits['q'])), s=5,alpha=0.75)
+            self.ax_xyz.scatter(unassoc_hits['px'], hitz, unassoc_hits['py'], lw=0.2, ec='C0', c= my_cmap(norm(unassoc_hits['q'])), s=5,alpha=0.75)
+            self.ax_xy.scatter(unassoc_hits['px'], unassoc_hits['py'], lw=0.2, ec='C0', c=my_cmap(norm(unassoc_hits['q'])), s=5,alpha=0.75)
+            self.ax_zy.scatter(hitz, unassoc_hits['py'], lw=0.2, ec='C0', c=my_cmap(norm(unassoc_hits['q'])), s=5,alpha=0.75)
 
 
 

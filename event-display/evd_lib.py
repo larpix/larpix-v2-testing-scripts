@@ -380,7 +380,7 @@ class LArPixEVDFile(object):
         
 
     def __init__(self, filename, source_file=None, configuration_file=None, geometry_file=None,
-                 pedestal_file=None, builder_config=None, fitter_config=None, buffer_len=128,
+                 pedestal_file=None, builder_config=None, fitter_config=None, buffer_len=2048,
                  verbose=False, fit_tracks=True, trigger_finder_config=None, find_triggers=True,
                  cores=1, force=False, electron_lifetime_file=None):
         self.verbose = verbose
