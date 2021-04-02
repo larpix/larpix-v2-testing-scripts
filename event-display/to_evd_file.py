@@ -120,7 +120,7 @@ def main(in_filename, out_filename, *args,
     del trigger_packet_mask
     del sync_packet_mask
 
-    n_packets      = #int(np.sum(mask))
+    n_packets      = len(packets) #int(np.sum(mask))
     start_idx      = 0
     end_idx        = buffer_size
     event_buffer   = np.array([],dtype=packets.dtype)
