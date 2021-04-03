@@ -242,14 +242,14 @@ class TrackFitter(object):
 
     def _get_z_coordinate(self, io_to_tile, tile_geometry, io_group, io_channel, time):
         try:
-            tile_id = self.io_to_tile[io_group, io_channel]
+            tile_id = io_to_tile[io_group, io_channel]
         except:
             print("IO group %i, IO channel %i not found" % (io_group, io_channel))
             return 0
 
         z_anode = tile_geometry[tile_id][0][0]
         drift_direction = tile_geometry[tile_id][1][0]
-
+	
         return z_anode + time*self._z_scale*drift_direction
 
     def fit(self, event, metadata=None, plot=False):
@@ -282,7 +282,7 @@ class TrackFitter(object):
         iter_mask = np.ones(len(event)).astype(bool)
         while True:
             if metadata['tile_geometry']:
-                xyz = np.array([(*geometry[(io_group, io_channel, chip_id, channel_id)],self._get_z_coordinate(metadata['io_to_tile'],metadata['tile_geometry'],io_channel,io_group,ts-t0))
+                xyz = np.array([(*geometry[(io_group, io_channel, chip_id, channel_id)],self._get_z_coordinate(metadata['io_to_tile'],metadata['tile_geometry'],io_group,io_channel,ts-t0))
                     for io_group, io_channel, chip_id, channel_id, ts in zip(event['io_group'], event['io_channel'], event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
             else:
                 xyz = np.array([(*geometry[(1,1,chip_id, channel_id)],(ts-t0)*self._z_scale) for chip_id, channel_id, ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
@@ -430,8 +430,8 @@ class LArPixEVDFile(object):
                 for tile in geometry_yaml['tile_chip_to_io']:
                     tile_orientation = tile_orientations[tile]
                     self.tile_geometry[tile] = tile_positions[tile], tile_orientations[tile]
-                    for chip in tile_chip_to_io[tile]:
-                        io_group_io_channel = tile_chip_to_io[tile][chip]
+                    for chip in geometry_yaml['tile_chip_to_io'][tile]:
+                        io_group_io_channel = geometry_yaml['tile_chip_to_io'][tile][chip]
                         io_group = io_group_io_channel//1000
                         io_channel = io_group_io_channel%1000
                         self.io_group_io_channel_to_tile[(io_group,io_channel)]=tile
@@ -454,6 +454,7 @@ class LArPixEVDFile(object):
                             self.geometry[(io_group,io_channel,chip,channel)] = x,y
                         except KeyError:
                             print("Chip %i not present in network" % chip)
+                print(self.io_group_io_channel_to_tile)
             else:
                 import larpixgeometry.layouts
                 geo = larpixgeometry.layouts.load(self.geometry_file) # open geometry yaml file
