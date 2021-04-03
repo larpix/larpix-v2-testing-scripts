@@ -149,8 +149,8 @@ class EventDisplay:
     def set_axes(self):
         self.ax_time_1.set_xticklabels([])
 
-        self.ax_time_1.set_xlim(0,self.drift_time)
-        self.ax_time_2.set_xlim(0,self.drift_time)
+        #self.ax_time_1.set_xlim(0,self.drift_time)
+        #self.ax_time_2.set_xlim(0,self.drift_time)
         self.ax_time_2.set_xlabel(r"timestamp [0.1 $\mathrm{\mu}$s]")
         self.ax_time_1.set_title("TPC 1",fontsize=10,x=0.5,y=0.75)
         self.ax_time_2.set_title("TPC 2",fontsize=10,x=0.5,y=0.75)
@@ -248,10 +248,12 @@ class EventDisplay:
         t_anode1 = hits_anode1['ts']-event['ts_start']
         t_anode2 = hits_anode2['ts']-event['ts_start']
         self.ax_time_1.hist(t_anode1, weights=q_anode1,
-                       bins=np.linspace(0,self.drift_time,200),
+                       bins=200,
+                       #bins=np.linspace(0,self.drift_time,200),
                        histtype='step', label='binned')
         self.ax_time_2.hist(t_anode2, weights=q_anode2,
-                       bins=np.linspace(0,self.drift_time,200),
+                       bins=200,
+                       #bins=np.linspace(0,self.drift_time,200),
                        histtype='step', label='binned')
 
         if q_anode1.any():
