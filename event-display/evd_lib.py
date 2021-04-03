@@ -239,7 +239,14 @@ class TrackFitter(object):
         axis = pca.components_[0] / np.linalg.norm(pca.components_[0])
         return centroid, axis
     
-    def _get_z_coordinate(self, tile_geometry, tile_id, time):
+
+    def _get_z_coordinate(self, io_to_tile, tile_geometry, io_group, io_channel, time):
+        try:
+            tile_id = self.io_to_tile[io_group, io_channel]
+        except:
+            print("IO group %i, IO channel %i not found" % (io_group, io_channel))
+            return 0
+
         z_anode = tile_geometry[tile_id][0][0]
         drift_direction = tile_geometry[tile_id][1][0]
 
@@ -275,7 +282,7 @@ class TrackFitter(object):
         iter_mask = np.ones(len(event)).astype(bool)
         while True:
             if metadata['tile_geometry']:
-                xyz = np.array([(*geometry[(io_group, io_channel, chip_id, channel_id)],self._get_z_coordinate(metadata['tile_geometry'],io_group,ts-t0))
+                xyz = np.array([(*geometry[(io_group, io_channel, chip_id, channel_id)],self._get_z_coordinate(metadata['io_to_tile'],metadata['tile_geometry'],io_channel,io_group,ts-t0))
                     for io_group, io_channel, chip_id, channel_id, ts in zip(event['io_group'], event['io_channel'], event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
             else:
                 xyz = np.array([(*geometry[(1,1,chip_id, channel_id)],(ts-t0)*self._z_scale) for chip_id, channel_id, ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
@@ -419,9 +426,17 @@ class LArPixEVDFile(object):
                 y_size = max(ys)-min(ys)+pixel_pitch
                 n_pixels_per_tile = len(np.unique(xs)), len(np.unique(ys))
 
+                self.io_group_io_channel_to_tile = {}
                 for tile in geometry_yaml['tile_chip_to_io']:
                     tile_orientation = tile_orientations[tile]
                     self.tile_geometry[tile] = tile_positions[tile], tile_orientations[tile]
+                    for chip in tile_chip_to_io[tile]:
+                        io_group_io_channel = tile_chip_to_io[tile][chip]
+                        io_group = io_group_io_channel//1000
+                        io_channel = io_group_io_channel%1000
+                        self.io_group_io_channel_to_tile[(io_group,io_channel)]=tile
+
+
                     for chip_channel in geometry_yaml['chip_channel_to_position']:
                         chip = chip_channel // 1000
                         channel = chip_channel % 1000
@@ -580,7 +595,7 @@ class LArPixEVDFile(object):
     #                     tracks_list = self.track_fitter.fit(events_list, self.geometry, trigs_list=trigs_list) \
     #                         if self.fit_tracks else [list() for i in range(len(events_list))]
                 tracks_list = [self.track_fitter.fit(
-                            ev, dict(geometry=self.geometry, trigs=trigs_list[i], tile_geometry=self.tile_geometry)) \
+                            ev, dict(geometry=self.geometry, trigs=trigs_list[i], io_to_tile=self.io_group_io_channel_to_tile, tile_geometry=self.tile_geometry)) \
                         for i,ev in enumerate(events_list)] \
                     if self.fit_tracks else [list() for i in range(len(events_list))]
 
