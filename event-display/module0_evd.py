@@ -337,7 +337,7 @@ class EventDisplay:
                 hits_anode2 = hits_trk[hits_trk['iogroup'] == 2]
 
                 self.ax_xy.scatter(hits_trk['px'], hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
-                hitz = [self._get_z_coordinate(io_group, io_channel, time) for io_group, time in zip(hits_trk['iogroup'], hits_trk['iochannel'], hits_trk['ts']-event_start_time)]
+                hitz = [self._get_z_coordinate(io_group, io_channel, time) for io_group, io_channel, time in zip(hits_trk['iogroup'], hits_trk['iochannel'], hits_trk['ts']-event_start_time)]
 
                 self.ax_zy.scatter(hitz, hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
                 self.ax_xyz.scatter(hits_trk['px'], hitz, hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
