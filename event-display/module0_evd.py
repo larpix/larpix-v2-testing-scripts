@@ -310,7 +310,7 @@ class EventDisplay:
         self.fig.colorbar(mcharge, cax=self.cax, label=r'Charge [$10^3$] e')
 
         if event['n_ext_trigs']:
-            trig_delta = self.ext_trigs[ext_trig_ref]['ts']-event['ts_start']
+            trig_delta = self.ext_trigs[ext_trig_ref]['ts']-event_start_time
             for trig in trig_delta:
                 self.ax_time_1.axvline(x=trig,c='g')
                 self.ax_time_2.axvline(x=trig,c='g')
