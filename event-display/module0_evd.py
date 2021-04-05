@@ -197,7 +197,7 @@ class EventDisplay:
 
 
     def set_axes(self):
-        self.ax_time_1.set_xticklabels([])
+        #self.ax_time_1.set_xticklabels([])
         #self.ax_time_1.set_xlim(0,self.drift_time)
         #self.ax_time_2.set_xlim(0,self.drift_time)
         self.ax_time_2.set_xlabel(r"timestamp [0.1 $\mathrm{\mu}$s]")
