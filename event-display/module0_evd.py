@@ -140,12 +140,18 @@ class EventDisplay:
                 print("End of file")
                 sys.exit()
 
-    def _get_z_coordinate(self, io_group, io_channel, time):
+    
+    def _get_tile_id(self, io_group, io_channel):
         try:
             tile_id = self.io_group_io_channel_to_tile[io_group, io_channel]
         except:
             print("IO group %i, IO channel %i not found" % (io_group, io_channel))
             return 0
+
+        return tile_id
+
+    def _get_z_coordinate(self, io_group, io_channel, time):
+        tile_id = self._get_tile_id(io_group, io_channel)
 
         z_anode = self.tile_positions[tile_id-1][0]
         drift_direction = self.tile_orientations[tile_id-1][0]
@@ -323,26 +329,35 @@ class EventDisplay:
             track_start = tracks['start']
             track_end = tracks['end']
             for i,track in enumerate(tracks):
+
+                hit_trk_ref = track['hit_ref']
+                hits_trk = self.hits[hit_trk_ref]
+
+		        # Difference between the z coordinate using the event ts_start (used in the track fitter)
+                # and the start time found by get_event_start_time
+                z_correction = (self._get_z_coordinate(hits_trk['iogroup'][0], hits_trk['iochannel'][0], event_start_time)
+                                -self._get_z_coordinate(hits_trk['iogroup'][0], hits_trk['iochannel'][0], event['ts_start']))
+
                 self.ax_xy.plot((track_start[i][0],track_end[i][0]),
                                 (track_start[i][1],track_end[i][1]),
                                 c='C{}'.format(i+1), alpha=0.75, lw=1)
 
-                self.ax_zy.plot((track_start[i][2],track_end[i][2]),
+                self.ax_zy.plot((track_start[i][2]-z_correction,track_end[i][2]-z_correction),
                                 (track_start[i][1],track_end[i][1]),
                                 c='C{}'.format(i+1), alpha=0.75, lw=1)
-                hit_trk_ref = track['hit_ref']
-                hits_trk = self.hits[hit_trk_ref]
 
                 hits_anode1 = hits_trk[hits_trk['iogroup'] == 1]
                 hits_anode2 = hits_trk[hits_trk['iogroup'] == 2]
 
                 self.ax_xy.scatter(hits_trk['px'], hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
+
                 hitz = [self._get_z_coordinate(io_group, io_channel, time) for io_group, io_channel, time in zip(hits_trk['iogroup'], hits_trk['iochannel'], hits_trk['ts']-event_start_time)]
 
                 self.ax_zy.scatter(hitz, hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
                 self.ax_xyz.scatter(hits_trk['px'], hitz, hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
+
                 self.ax_xyz.plot((track_start[i][0],track_end[i][0]),
-                                 (track_start[i][2],track_end[i][2]),
+                                 (track_start[i][2]-z_correction,track_end[i][2]-z_correction),
                                  (track_start[i][1],track_end[i][1]),
                                  c='C{}'.format(i+1), alpha=0.5, lw=4)
 
