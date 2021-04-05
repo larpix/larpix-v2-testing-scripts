@@ -38,7 +38,7 @@ class EventDisplay:
                                         left=0.15, right=0.5, bottom=0.58,
                                         hspace=0, wspace=0)
         ax_xy = self.fig.add_subplot(gs_xyzy[1])
-        ax_zy = self.fig.add_subplot(gs_xyzy[0])
+        ax_zy = self.fig.add_subplot(gs_xyzy[0], sharey=ax_xy)
 
         cax = self.fig.add_subplot(gs_xyzy[2])
         ip = InsetPosition(ax_xy, [1.1,0,0.1,1])
@@ -50,7 +50,7 @@ class EventDisplay:
                                         left=0.1, right=0.57, bottom=0.08, top=0.47,
                                         hspace=0.09)
         ax_time_1 = self.fig.add_subplot(gs_time[0])
-        ax_time_2 = self.fig.add_subplot(gs_time[1])
+        ax_time_2 = self.fig.add_subplot(gs_time[1], sharex=ax_time_1)
 
         gs_xyz = self.fig.add_gridspec(nrows=1, ncols=1,
                                        left=0.52, right=0.99, bottom=0.1, top=0.95,
