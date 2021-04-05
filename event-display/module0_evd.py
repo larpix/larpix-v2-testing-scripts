@@ -37,8 +37,9 @@ class EventDisplay:
         gs_xyzy = self.fig.add_gridspec(nrows=1, ncols=3, top=0.93, width_ratios=[1,1, 0.05],
                                         left=0.15, right=0.5, bottom=0.58,
                                         hspace=0, wspace=0)
-        ax_xy = self.fig.add_subplot(gs_xyzy[1])
-        ax_zy = self.fig.add_subplot(gs_xyzy[0], sharey=ax_xy)
+
+        ax_zy = self.fig.add_subplot(gs_xyzy[0])
+        ax_xy = self.fig.add_subplot(gs_xyzy[1], sharey=ax_zy)
 
         cax = self.fig.add_subplot(gs_xyzy[2])
         ip = InsetPosition(ax_xy, [1.1,0,0.1,1])
@@ -208,7 +209,9 @@ class EventDisplay:
         self.ax_xy.set_ylim(np.min(self.tpc_borders[:,1,:]), np.max(self.tpc_borders[:,1,:]))
         self.ax_xy.set_aspect('equal')
         self.ax_xy.set_xlabel("x [mm]")
-        self.ax_xy.set_yticklabels([])
+        for tk in self.ax_xy.get_yticklabels():
+            tk.set_visible(False)
+        #self.ax_xy.set_yticklabels([])
 
         self.ax_zy.set_xlim(np.min(self.tpc_borders[:,0,:]), np.max(self.tpc_borders[:,0,:]))
         self.ax_zy.set_ylim(np.min(self.tpc_borders[:,1,:]), np.max(self.tpc_borders[:,1,:]))
