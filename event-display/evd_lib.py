@@ -277,8 +277,10 @@ class TrackFitter(object):
         if len(event) < 2: return list()#continue
         if trigs:
             t0 = np.min([trig['ts'] for trig in trigs]).astype(int)
+            t0_type = 1
         else:
             t0 = event['timestamp'][0].astype(int)
+            t0_type = 0
         iter_mask = np.ones(len(event)).astype(bool)
         while True:
             if metadata['tile_geometry']:
@@ -319,7 +321,8 @@ class TrackFitter(object):
                         length=np.linalg.norm(r_max[:3]-r_min[:3]),
                         start=r_min,
                         end=r_max,
-                        t0=t0
+                        t0=t0,
+                        t0_type=t0_type
                     ))
                 iter_mask[mask] = 0
 
@@ -370,7 +373,7 @@ class LArPixEVDFile(object):
             ('phi', 'f8'), ('xp', 'f8'), ('yp', 'f8'), ('nhit', 'i8'),
             ('q', 'f8'), ('ts_start', 'i8'), ('ts_end', 'i8'),
             ('residual', 'f8', (3,)), ('length', 'f8'), ('start', 'f8', (4,)),
-            ('end', 'f8', (4,)), ('q_raw', 'f8')
+            ('end', 'f8', (4,)), ('q_raw', 'f8'), ('t0_type', 'u1')
         ],
         'ext_trigs' : [
             ('trig_id', 'i8'), ('event_ref', region_ref), ('ts', 'i8'), ('type', 'u1')
@@ -686,8 +689,10 @@ class LArPixEVDFile(object):
                         tracks_dict['start']       = np.zeros((len(tracks),4))
                         tracks_dict['end']         = np.zeros((len(tracks),4))
                         tracks_dict['t0']          = np.zeros((len(tracks),))
+                        tracks_dict['t0_type']     = np.zeros((len(tracks),))
                         for i,track in enumerate(tracks):
                             tracks_dict['t0'][i]        = track['t0']
+                            tracks_dict['t0_type'][i]   = track['t0_type']
                             tracks_dict['nhit'][i]      = np.sum(track['mask'])
                             tracks_dict['q_raw'][i]     = np.sum(hits_dict['q_raw'][track['mask']])
                             hits_dict['q'][track['mask']] = hits_dict['q_raw'][track['mask']] \
