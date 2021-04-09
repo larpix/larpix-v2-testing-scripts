@@ -15,7 +15,7 @@ from mpl_toolkits.axes_grid1.inset_locator import InsetPosition
 
 try:
     matplotlib.use("Qt5Agg")
-except ModuleNotFoundError:
+except (ModuleNotFoundError, ImportError):
     matplotlib.use("TkAgg")
     print("Impossible to found Qt libraries, using Tkinter backend")
 
@@ -298,7 +298,7 @@ class EventDisplay:
 
         q_anode1 = hits_anode1['q'] * 0.250
         q_anode2 = hits_anode2['q'] * 0.250
-        print(hits_anode1['ts'][:200])
+
         t_anode1 = hits_anode1['ts']-event_start_time
         t_anode2 = hits_anode2['ts']-event_start_time
         self.ax_time_1.hist(t_anode1, weights=q_anode1,
