@@ -298,6 +298,7 @@ class EventDisplay:
 
         q_anode1 = hits_anode1['q'] * 0.250
         q_anode2 = hits_anode2['q'] * 0.250
+        print(hits_anode1['ts'][:200])
         t_anode1 = hits_anode1['ts']-event_start_time
         t_anode2 = hits_anode2['ts']-event_start_time
         self.ax_time_1.hist(t_anode1, weights=q_anode1,
@@ -345,7 +346,7 @@ class EventDisplay:
                                 (track_start[i][1],track_end[i][1]),
                                 c='C{}'.format(i+1), alpha=0.75, lw=1)
 
-                self.ax_zy.plot((track_start[i][2]-z_correction,track_end[i][2]-z_correction),
+                self.ax_zy.plot((track_start[i][2],track_end[i][2]),
                                 (track_start[i][1],track_end[i][1]),
                                 c='C{}'.format(i+1), alpha=0.75, lw=1)
 
@@ -354,13 +355,14 @@ class EventDisplay:
 
                 self.ax_xy.scatter(hits_trk['px'], hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
 
-                hitz = [self._get_z_coordinate(io_group, io_channel, time) for io_group, io_channel, time in zip(hits_trk['iogroup'], hits_trk['iochannel'], hits_trk['ts']-event_start_time)]
+
+                hitz = [self._get_z_coordinate(io_group, io_channel, time) for io_group, io_channel, time in zip(hits_trk['iogroup'], hits_trk['iochannel'], hits_trk['ts']-track['t0'])]
 
                 self.ax_zy.scatter(hitz, hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
                 self.ax_xyz.scatter(hits_trk['px'], hitz, hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
 
                 self.ax_xyz.plot((track_start[i][0],track_end[i][0]),
-                                 (track_start[i][2]-z_correction,track_end[i][2]-z_correction),
+                                 (track_start[i][2],track_end[i][2]),
                                  (track_start[i][1],track_end[i][1]),
                                  c='C{}'.format(i+1), alpha=0.5, lw=4)
 
