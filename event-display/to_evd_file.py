@@ -106,11 +106,11 @@ def main(in_filename, out_filename, *args,
     packet_counter = 0
 
     # remove configuration messages and packets with bad parity
-    good_parity_mask      = packets[:]['valid_parity']
-    data_packet_mask      = packets[:]['packet_type'] == 0
-    trigger_packet_mask   = packets[:]['packet_type'] == 7
-    sync_packet_mask      = packets[:]['packet_type'] == 6
-    timestamp_packet_mask = packets[:]['packet_type'] == 4
+    good_parity_mask      = packets['valid_parity'][:]
+    data_packet_mask      = packets['packet_type'][:] == 0
+    trigger_packet_mask   = packets['packet_type'][:] == 7
+    sync_packet_mask      = packets['packet_type'][:] == 6
+    timestamp_packet_mask = packets['packet_type'][:] == 4
     mask = np.logical_and(good_parity_mask, data_packet_mask)
     mask = np.logical_or(mask,timestamp_packet_mask)
     if 'pacman_trigger_enabled' in external_trigger_conf and external_trigger_conf['pacman_trigger_enabled']:
