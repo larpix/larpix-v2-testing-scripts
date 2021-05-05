@@ -632,7 +632,7 @@ class LArPixEVDFile(object):
                     events_dict['q_raw']       = np.array([0.])
                     if len(event) and len(trigs):
                         events_dict['ts_start'] = np.array([min(event[0]['timestamp'],trigs[0]['ts'])])
-                        events_dict['ts_end']   = np.array([min(event[-1]['timestamp'],trigs[-1]['ts'])])
+                        events_dict['ts_end']   = np.array([max(event[-1]['timestamp'],trigs[-1]['ts'])])
                     elif len(event):
                         events_dict['ts_start'] = np.array([event[0]['timestamp']])
                         events_dict['ts_end']   = np.array([event[-1]['timestamp']])
