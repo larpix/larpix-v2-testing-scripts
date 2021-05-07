@@ -127,14 +127,14 @@ class SymmetricWindowEventBuilder(EventBuilder):
     '''
         A sliding-window based event builder.
 
-        Calculates the time difference between each packet in the chunk. Two
-        packets are deemed "correlated" if they are separated by less than the
-        `window`. Events are formed as contiguous regions in time where the
-        number of correlated packets exceeds the `threshold`.
+        Histograms the packets into bins of `window` width. Events are formed
+        if a bin content is greater than `threshold`. The event extent covers
+        the bin of interest and +/- 1 bin. If multiple adjacent bins exceed
+        the threshold, they are merged into a single event.
 
         Configurable parameters::
 
-            window      - time delta to consider as correlated
+            window      - bin width
             threshold   - number of correlated hits to initiate event
 
     '''
