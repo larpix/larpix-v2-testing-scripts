@@ -138,7 +138,7 @@ class SymmetricWindowEventBuilder(EventBuilder):
             threshold   - number of correlated hits to initiate event
 
     '''
-    default_window = 1820 * 2
+    default_window = 1820
     default_threshold = 25
 
     def __init__(self, **params):
@@ -157,7 +157,8 @@ class SymmetricWindowEventBuilder(EventBuilder):
 
     def build_events(self, packets, unix_ts):
         # sort packets to fix 512 bug
-        sorted_idcs = np.argsort(np.append(self.event_buffer, packets) if len(self.event_buffer) else packets, order='timestamp')
+        packets     = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
+        sorted_idcs = np.argsort(packets, order='timestamp')
         packets     = packets[sorted_idcs]
         unix_ts     = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
 
