@@ -11,7 +11,6 @@ import json
 import time
 import yaml
 import warnings
-warnings.simplefilter('once', RuntimeWarning)
 
 region_ref = h5py.special_dtype(ref=h5py.RegionReference)
 
