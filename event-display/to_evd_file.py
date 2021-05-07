@@ -4,7 +4,7 @@ import argparse
 import time
 
 from evd_lib import *
-import event_builder
+from event_builder import *
 
 _default_geometry_file         = None
 _default_configuration_file    = None
@@ -56,7 +56,7 @@ def main(in_filename, out_filename, *args,
     packets        = larpix_logfile['packets']
 
     # create event builder instance
-    event_builder = getattr(event_builder, event_builder_class)(**event_builder_config)
+    event_builder = globals()[event_builder_class](**event_builder_config)
     event_counter  = 0
     packet_counter = 0
 
@@ -68,7 +68,7 @@ def main(in_filename, out_filename, *args,
         configuration_file = configuration_file,
         pedestal_file      = pedestal_file,
         builder_config     = dict(
-            class       = event_builder_class,
+            classname   = event_builder_class,
             buffer_size = buffer_size,
             nhit_cut    = nhit_cut,
             max_packets = max_packets,
@@ -88,26 +88,26 @@ def main(in_filename, out_filename, *args,
         )
 
     # remove configuration messages and packets with bad parity
-    good_parity_mask      = packets['valid_parity'][:]
-    data_packet_mask      = packets['packet_type'][:] == 0
-    trigger_packet_mask   = packets['packet_type'][:] == 7
-    sync_packet_mask      = packets['packet_type'][:] == 6
-    timestamp_packet_mask = packets['packet_type'][:] == 4
-    mask = np.logical_and(good_parity_mask, data_packet_mask)
-    mask = np.logical_or(mask,timestamp_packet_mask)
-    if 'pacman_trigger_enabled' in external_trigger_conf and external_trigger_conf['pacman_trigger_enabled']:
-        mask = np.logical_or(mask,trigger_packet_mask)
-    del good_parity_mask
-    del data_packet_mask
-    del trigger_packet_mask
-    del sync_packet_mask
+#     good_parity_mask      = packets['valid_parity'][:max_packets]
+#     data_packet_mask      = packets['packet_type'][:max_packets] == 0
+#     trigger_packet_mask   = packets['packet_type'][:max_packets] == 7
+#     sync_packet_mask      = packets['packet_type'][:max_packets] == 6
+    timestamp_packet_mask = packets['packet_type'][:max_packets] == 4
+#     mask = np.logical_and(good_parity_mask, data_packet_mask)
+#     mask = np.logical_or(mask,timestamp_packet_mask)
+#     if 'pacman_trigger_enabled' in external_trigger_conf and external_trigger_conf['pacman_trigger_enabled']:
+#         mask = np.logical_or(mask,trigger_packet_mask)
+#     del good_parity_mask
+#     del data_packet_mask
+#     del trigger_packet_mask
+#     del sync_packet_mask
 
     n_packets      = len(packets) #int(np.sum(mask))
     start_idx      = 0
     end_idx        = buffer_size
     start_time     = time.time()
-    last_unix_ts   = np.array(packets[timestamp_packet_mask][0],dtype=packets.dtype)
-    del timestamp_packet_mask
+    last_unix_ts   = np.array(packets[:max_packets][timestamp_packet_mask][0], dtype=packets.dtype)
+#     del timestamp_packet_mask
     while start_idx < n_packets and (max_packets < 0 or start_idx < max_packets):
         # load a buffer of data
         block = packets[start_idx:min(end_idx,n_packets)]
@@ -131,9 +131,10 @@ def main(in_filename, out_filename, *args,
 
         # run event builder
         events, event_unix_ts = event_builder.build_events(packet_buffer, unix_ts)
-        for event, unix_ts in events, event_unix_ts:
+        for event, unix_ts in zip(events, event_unix_ts):
             if len(event) >= nhit_cut:
                 add_event(evd_file, event, unix_ts)
+                event_counter += 1
 
         # increment buffer indices
         start_idx = end_idx

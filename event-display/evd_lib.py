@@ -10,6 +10,8 @@ import queue
 import json
 import time
 import yaml
+import warnings
+warnings.simplefilter('once', RuntimeWarning)
 
 region_ref = h5py.special_dtype(ref=h5py.RegionReference)
 
@@ -244,7 +246,7 @@ class TrackFitter(object):
         try:
             tile_id = io_to_tile[io_group, io_channel]
         except:
-            print("IO group %i, IO channel %i not found" % (io_group, io_channel))
+            warnings.warn("IO group %i, IO channel %i not found" % (io_group, io_channel), RuntimeWarning)
             return 0
 
         z_anode = tile_geometry[tile_id][0][0]

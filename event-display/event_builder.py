@@ -51,12 +51,12 @@ class TimeDeltaEventBuilder(EventBuilder):
     default_max_event_dt = 1820 * 3
 
     def __init__(self, **params):
-        super(self).__init__(**params)
+        super(EventBuilder, self).__init__(**params)
         self.event_dt = params.get('event_dt', self.default_event_dt)
         self.max_event_dt = params.get('max_event_dt', self.default_max_event_dt)
 
         self.event_buffer = np.empty((0,)) # keep track of partial events from previous calls
-        self.event_buffer_unix_ts = np.empty((0,))
+        self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
 
     def get_config(self):
         return dict(
@@ -66,9 +66,10 @@ class TimeDeltaEventBuilder(EventBuilder):
 
     def build_events(self, packets, unix_ts):
         # sort packets to fix 512 bug
-        sorted_idcs = np.argsort(np.append(self.event_buffer, packets), order='timestamp')
+        packets     = np.append(self.event_buffer, packets) if len(self.event_buffer) else packets
+        sorted_idcs = np.argsort(packets, order='timestamp')
         packets     = packets[sorted_idcs]
-        unix_ts     = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs]
+        unix_ts     = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
 
         # cluster into events by delta t
         packet_dt = packets['timestamp'][1:] - packets['timestamp'][:-1]
@@ -141,12 +142,12 @@ class SymmetricWindowEventBuilder(EventBuilder):
     default_threshold = 25
 
     def __init__(self, **params):
-        super(self).__init__(**params)
+        super(EventBuilder, self).__init__(**params)
         self.window = params.get('window', self.default_window)
         self.threshold = params.get('threshold', self.default_threshold)
 
         self.event_buffer = np.empty((0,)) # keep track of partial events from previous calls
-        self.event_buffer_unix_ts = np.empty((0,))
+        self.event_buffer_unix_ts = np.empty((0,), dtype='u8')
 
     def get_config(self):
         return dict(
@@ -156,40 +157,51 @@ class SymmetricWindowEventBuilder(EventBuilder):
 
     def build_events(self, packets, unix_ts):
         # sort packets to fix 512 bug
-        sorted_idcs = np.argsort(np.append(self.event_buffer, packets), order='timestamp')
+        sorted_idcs = np.argsort(np.append(self.event_buffer, packets) if len(self.event_buffer) else packets, order='timestamp')
         packets     = packets[sorted_idcs]
-        unix_ts     = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs]
+        unix_ts     = np.append(self.event_buffer_unix_ts, unix_ts)[sorted_idcs] if len(self.event_buffer_unix_ts) else unix_ts[sorted_idcs]
 
         # calculate time distance between hits
-        timestamp       = packets['timestamp'].astype(int)
-        ts_diff_matrix  = np.abs(timestamp.reshape(-1,1) - timestamp.reshape(1,-1))
+        min_ts, max_ts = np.min(packets['timestamp']), np.max(packets['timestamp'])
+        bin_edges = np.linspace(min_ts, max_ts, int((max_ts - min_ts)//self.window))
+        hist, bin_edges = np.histogram(packets['timestamp'], bins=bin_edges)
 
         # find high correlation regions
-        n_corr_hits     = np.count_nonzero(ts_diff_matrix <= self.window, axis=-1)
-        is_in_event     = (n_corr_hits >= self.threshold).astype(int)
-        event_boundary  = np.diff(is_in_event)
+        event_mask = (hist > self.threshold)
+        event_mask[:-1] = event_mask[:-1] | (hist > self.threshold)[1:]
+        event_mask[1:] = event_mask[1:] | (hist > self.threshold)[:-1]
 
         # find rising/falling edges
-        event_idcs    = np.argwhere(event_boundary != 0).flatten() + 1
+        event_start_timestamp = bin_edges[:-2][np.diff(event_mask.astype(int)) > 0]
+        event_end_timestamp = bin_edges[:-2][np.diff(event_mask.astype(int)) < 0]
 
-        if is_in_event[0]:
+        if event_end_timestamp[0] < event_start_timestamp[0]:
             # first packet is in first event, make sure you align the start/end idcs correctly
-            event_idcs = np.r_[0, event_idcs]
+            event_start_timestamp = np.r_[min_ts, event_start_timestamp]
 
-        if is_in_event[-1]:
+        if event_end_timestamp[-1] < event_start_timestamp[-1]:
             # last event is incomplete, reserve for next iteration
-            self.event_buffer = packets[event_idcs[-1]:]
-            self.event_buffer_unix_ts = unix_ts[event_idcs[-1]:]
-            packets = packets[:event_idcs[-1]]
-            unix_ts = unix_ts[:event_idcs[-1]]
-            event_idcs = event_idcs[:-1]
+            mask = packets['timestamp'] > event_start_timestamp[-1]
+            self.event_buffer = packets[mask]
+            self.event_buffer_unix_ts = unix_ts[mask]
+            packets = packets[~mask]
+            unix_ts = unix_ts[~mask]
+            event_start_timestamp = event_start_timestamp[:-1]
+        else:
+            self.event_buffer = np.empty((0,), dtype=packets.dtype)
+            self.event_buffer_unix_ts = np.empty((0,), dtype=unix_ts.dtype)
 
         # break up by event
+        event_mask = (packets['timestamp'].reshape(1,-1) > event_start_timestamp.reshape(-1,1)) \
+            & (packets['timestamp'].reshape(1,-1) < event_end_timestamp.reshape(-1,1))
+        event_diff = np.diff(event_mask, axis=-1)
+        event_idcs = np.argwhere(event_diff)[:,1] + 1
+        
         events = np.split(packets, event_idcs)
         event_unix_ts = np.split(unix_ts, event_idcs)
-        is_event = np.r_[False, is_in_event[event_idcs]]
+        is_event = np.r_[False, np.any(event_diff, axis=0)[event_idcs-1]]
 
         # only return packets from events
-        return zip(*[(event, unix_ts) for i, (event,unix_ts) in enumerate(zip(events, event_unix_ts)) if is_event[i]])
+        return zip(*[v for i,v in enumerate(zip(events, event_unix_ts)) if is_event[i]])
 
 
