@@ -3,7 +3,6 @@ import json
 import argparse
 import time
 import warnings
-warnings.simplefilter('once', RuntimeWarning)
 
 from evd_lib import *
 from event_builder import *
@@ -65,6 +64,8 @@ def main(in_filename, out_filename, *args,
     packet_counter = 0
 
     # create buffered output file
+    with open('VERSION','r') as fi:
+        version = fi.readlines()[0].strip()
     evd_file = LArPixEVDFile(
         out_filename,
         source_file        = in_filename,
@@ -73,6 +74,7 @@ def main(in_filename, out_filename, *args,
         pedestal_file      = pedestal_file,
         builder_config     = dict(
             classname   = event_builder_class,
+            version     = version,
             buffer_size = buffer_size,
             nhit_cut    = nhit_cut,
             max_packets = max_packets,
@@ -180,4 +182,9 @@ if __name__ == '__main__':
     parser.add_argument('--electron_lifetime_file',default=_default_electron_lifetime_file,type=str,help='''file containing electron lifetime calibration''')
     parser.add_argument('--sync_noise_cut',default=_default_sync_noise_cut,type=int,help='''Remove events with a timestamp less than this''')
     args = parser.parse_args()
+    
+    warnings.simplefilter('once')
+    
     main(**vars(args))
+    
+    
