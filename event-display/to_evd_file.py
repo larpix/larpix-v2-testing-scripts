@@ -2,6 +2,8 @@ import numpy as np
 import json
 import argparse
 import time
+import warnings
+warnings.simplefilter('once', RuntimeWarning)
 
 from evd_lib import *
 from event_builder import *
@@ -26,6 +28,7 @@ _default_external_trigger_conf = dict(
 _default_skip_trigger_finding   = False
 _default_force                  = False
 _default_electron_lifetime_file = None
+_default_sync_noise_cut         = 100000
 
 def add_event(evd_file, event, unix_ts):
     event_timestamp,counts = np.unique(unix_ts['timestamp'], return_counts=True)
@@ -50,6 +53,7 @@ def main(in_filename, out_filename, *args,
          skip_trigger_finding=_default_skip_trigger_finding,
          force=_default_force,
          electron_lifetime_file=_default_electron_lifetime_file,
+         sync_noise_cut=_default_sync_noise_cut,
          **kwargs):
     # load larpix file
     larpix_logfile = load_larpix_logfile(in_filename)
@@ -133,6 +137,8 @@ def main(in_filename, out_filename, *args,
         events, event_unix_ts = event_builder.build_events(packet_buffer, unix_ts)
         for event, unix_ts in zip(events, event_unix_ts):
             if len(event) >= nhit_cut:
+                if np.min(event['timestamp']) < sync_noise_cut:
+                    continue
                 add_event(evd_file, event, unix_ts)
                 event_counter += 1
 
@@ -172,5 +178,6 @@ if __name__ == '__main__':
     parser.add_argument('--skip_trigger_finding',action='store_true',help='''flag to skip external trigger finding''')
     parser.add_argument('--force','-f',action='store_true',help='''overwrite file if it exists''')
     parser.add_argument('--electron_lifetime_file',default=_default_electron_lifetime_file,type=str,help='''file containing electron lifetime calibration''')
+    parser.add_argument('--sync_noise_cut',default=_default_sync_noise_cut,type=int,help='''Remove events with a timestamp less than this''')
     args = parser.parse_args()
     main(**vars(args))
