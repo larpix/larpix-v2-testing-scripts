@@ -174,8 +174,8 @@ class SymmetricWindowEventBuilder(EventBuilder):
 
         # find rising/falling edges
         event_start_timestamp = bin_edges[:-2][np.diff(event_mask.astype(int)) > 0]
-        event_end_timestamp = bin_edges[:-2][np.diff(event_mask.astype(int)) < 0]
-        
+        event_end_timestamp = bin_edges[2:][np.diff(event_mask.astype(int)) < 0]
+
         if not np.any(event_mask):
             # no events
             return [], []
@@ -191,7 +191,7 @@ class SymmetricWindowEventBuilder(EventBuilder):
             unix_ts = unix_ts[~mask]
             event_start_timestamp = event_start_timestamp[:-1]
             return [], []
-        
+
         if event_end_timestamp[0] < event_start_timestamp[0]:
             # first packet is in first event, make sure you align the start/end idcs correctly
             event_start_timestamp = np.r_[min_ts, event_start_timestamp]
@@ -212,7 +212,7 @@ class SymmetricWindowEventBuilder(EventBuilder):
             & (packets['timestamp'].reshape(1,-1) < event_end_timestamp.reshape(-1,1))
         event_diff = np.diff(event_mask, axis=-1)
         event_idcs = np.argwhere(event_diff)[:,1] + 1
-        
+
         events = np.split(packets, event_idcs)
         event_unix_ts = np.split(unix_ts, event_idcs)
         is_event = np.r_[False, np.any(event_diff, axis=0)[event_idcs-1]]
