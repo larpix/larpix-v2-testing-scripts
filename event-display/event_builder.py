@@ -210,12 +210,13 @@ class SymmetricWindowEventBuilder(EventBuilder):
         # break up by event
         event_mask = (packets['timestamp'].reshape(1,-1) > event_start_timestamp.reshape(-1,1)) \
             & (packets['timestamp'].reshape(1,-1) < event_end_timestamp.reshape(-1,1))
+        event_mask = np.any(event_mask, axis=0)
         event_diff = np.diff(event_mask, axis=-1)
-        event_idcs = np.argwhere(event_diff)[:,1] + 1
+        event_idcs = np.argwhere(event_diff).flatten() + 1
 
         events = np.split(packets, event_idcs)
         event_unix_ts = np.split(unix_ts, event_idcs)
-        is_event = np.r_[False, np.any(event_diff, axis=0)[event_idcs-1]]
+        is_event = np.r_[False, event_mask[event_idcs]]
 
         # only return packets from events
         return zip(*[v for i,v in enumerate(zip(events, event_unix_ts)) if is_event[i]])
