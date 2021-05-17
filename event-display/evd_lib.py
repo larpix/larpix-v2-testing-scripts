@@ -135,7 +135,7 @@ class ExternalTriggerFinder(object):
                             mask=mask.astype(bool)
                             ))
         return event_trigs
-import numba as nb
+
 class TrackFitter(object):
     '''
     A class to extract tracks from packet arrays
@@ -285,7 +285,7 @@ class TrackFitter(object):
         while True:
             if metadata['tile_geometry']:
                 xyz = np.array([(*geometry[(io_group, io_channel, chip_id, channel_id)],self._get_z_coordinate(metadata['io_to_tile'],metadata['tile_geometry'],io_group,io_channel,ts-t0))
-                    for io_group, io_channel, chip_id, channel_id, ts in zip(event['io_group'], event['io_channel'], event['chip_id'], event['channel_id'], event['timestamp'])])
+                    for io_group, io_channel, chip_id, channel_id, ts in zip(event['io_group'], event['io_channel'], event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
             else:
                 xyz = np.array([(*geometry[(1,1,chip_id, channel_id)],(ts-t0)*self._z_scale) for chip_id, channel_id, ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
             # dbscan to find clusters
@@ -387,7 +387,6 @@ class LArPixEVDFile(object):
     @staticmethod
     def _rotate_pixel(pixel_pos, tile_orientation):
         return pixel_pos[0]*tile_orientation[2], pixel_pos[1]*tile_orientation[1]
-
 
     def __init__(self, filename, source_file=None, configuration_file=None, geometry_file=None,
                  pedestal_file=None, builder_config=None, fitter_config=None, buffer_len=2048,

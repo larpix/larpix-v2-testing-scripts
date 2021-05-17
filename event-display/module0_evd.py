@@ -141,7 +141,6 @@ class EventDisplay:
                 print("End of file")
                 sys.exit()
 
-
     def _get_tile_id(self, io_group, io_channel):
         try:
             tile_id = self.io_group_io_channel_to_tile[io_group, io_channel]
