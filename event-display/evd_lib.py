@@ -1,4 +1,5 @@
 import h5py
+import warnings
 #import threading
 import os
 import numpy as np
@@ -251,11 +252,11 @@ class TrackFitter(object):
         return centroid, axis
 
     def _get_z_coordinate(self, io_to_tile, tile_geometry, io_group, io_channel, this_time):
-        if (io_group, io_channel) not in io_to_tile:
-            #print("IO group %i, IO channel %i not found" % (io_group, io_channel))
+        try:
+            tile_id = io_to_tile[io_group, io_channel]
+        except KeyError:
             return 0
 
-        tile_id = io_to_tile[io_group, io_channel]
         z_anode = tile_geometry[tile_id][0][0]
         drift_direction = tile_geometry[tile_id][1][0]
 
