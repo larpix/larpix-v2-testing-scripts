@@ -15,7 +15,7 @@ from mpl_toolkits.axes_grid1.inset_locator import InsetPosition
 
 try:
     matplotlib.use("Qt5Agg")
-except ModuleNotFoundError:
+except (ModuleNotFoundError, ImportError):
     matplotlib.use("TkAgg")
     print("Impossible to found Qt libraries, using Tkinter backend")
 
@@ -37,8 +37,9 @@ class EventDisplay:
         gs_xyzy = self.fig.add_gridspec(nrows=1, ncols=3, top=0.93, width_ratios=[1,1, 0.05],
                                         left=0.15, right=0.5, bottom=0.58,
                                         hspace=0, wspace=0)
-        ax_xy = self.fig.add_subplot(gs_xyzy[1])
+
         ax_zy = self.fig.add_subplot(gs_xyzy[0])
+        ax_xy = self.fig.add_subplot(gs_xyzy[1], sharey=ax_zy)
 
         cax = self.fig.add_subplot(gs_xyzy[2])
         ip = InsetPosition(ax_xy, [1.1,0,0.1,1])
@@ -50,7 +51,7 @@ class EventDisplay:
                                         left=0.1, right=0.57, bottom=0.08, top=0.47,
                                         hspace=0.09)
         ax_time_1 = self.fig.add_subplot(gs_time[0])
-        ax_time_2 = self.fig.add_subplot(gs_time[1])
+        ax_time_2 = self.fig.add_subplot(gs_time[1], sharex=ax_time_1)
 
         gs_xyz = self.fig.add_gridspec(nrows=1, ncols=1,
                                        left=0.52, right=0.99, bottom=0.1, top=0.95,
@@ -140,20 +141,64 @@ class EventDisplay:
                 print("End of file")
                 sys.exit()
 
-    def _get_z_coordinate(self, io_group, io_channel, time):
+
+    def _get_tile_id(self, io_group, io_channel):
         try:
             tile_id = self.io_group_io_channel_to_tile[io_group, io_channel]
         except:
             print("IO group %i, IO channel %i not found" % (io_group, io_channel))
             return 0
 
+        return tile_id
+
+    def _get_z_coordinate(self, io_group, io_channel, time):
+        tile_id = self._get_tile_id(io_group, io_channel)
+
         z_anode = self.tile_positions[tile_id-1][0]
         drift_direction = self.tile_orientations[tile_id-1][0]
 
         return z_anode + time*self.info['vdrift']*self.info['clock_period']*drift_direction
 
+    def get_event_start_time(self, event):
+        """Estimate the event start time"""
+        if event['n_ext_trigs']:
+            # First Choice: Use earliest light system trigger in event
+            return self.ext_trigs[event['ext_trig_ref']]['ts'][0]
+        # Second Choice:
+        #  Try to determine the start time from a 'bump' in charge.
+        #  This is only valid if some part of the event hits one of the anodes.
+        ticks_per_qsum = 10 # clock ticks per time bin
+        t0_charge_threshold = 200.0 # Rough qsum threshold
+        hit_ref = event['hit_ref']
+        hits = self.hits[hit_ref]
+        # determine charge vs time in enlarged window
+        min_ts = np.amin(hits['ts'])
+        max_ts = np.amax(hits['ts'])
+        # If event long enough, calculate qsum vs time
+        if (max_ts - min_ts) > ticks_per_qsum:
+            time_bins = np.arange(min_ts-ticks_per_qsum,
+                                    max_ts+ticks_per_qsum)
+            # integrate q in sliding window to produce qsum profile
+            #  histogram raw charge
+            q_vs_t = np.histogram(hits['ts'],
+                                    bins=time_bins,
+                                    weights=hits['q'])[0]
+            #  calculate rolling qsum
+            qsum_vs_t = np.convolve(q_vs_t,
+                                    np.ones(ticks_per_qsum,dtype=int),
+                                    'valid')
+            t0_bin_index = np.argmax(qsum_vs_t>t0_charge_threshold)
+            t0_bin_index += ticks_per_qsum
+            start_time = time_bins[t0_bin_index]
+            # Check if qsum exceed threshold
+            if start_time < max_ts:
+                return start_time
+        # Fallback is to use the first hit
+        return event['ts_start']
+
+
     def set_axes(self):
-        self.ax_time_1.set_xticklabels([])
+        #self.ax_time_1.set_xticklabels([])
         #self.ax_time_1.set_xlim(0,self.drift_time)
         #self.ax_time_2.set_xlim(0,self.drift_time)
         self.ax_time_2.set_xlabel(r"timestamp [0.1 $\mathrm{\mu}$s]")
@@ -164,7 +209,9 @@ class EventDisplay:
         self.ax_xy.set_ylim(np.min(self.tpc_borders[:,1,:]), np.max(self.tpc_borders[:,1,:]))
         self.ax_xy.set_aspect('equal')
         self.ax_xy.set_xlabel("x [mm]")
-        self.ax_xy.set_yticklabels([])
+        for tk in self.ax_xy.get_yticklabels():
+            tk.set_visible(False)
+        #self.ax_xy.set_yticklabels([])
 
         self.ax_zy.set_xlim(np.min(self.tpc_borders[:,0,:]), np.max(self.tpc_borders[:,0,:]))
         self.ax_zy.set_ylim(np.min(self.tpc_borders[:,1,:]), np.max(self.tpc_borders[:,1,:]))
@@ -240,6 +287,8 @@ class EventDisplay:
         hit_ref = event['hit_ref']
         ext_trig_ref = event['ext_trig_ref']
 
+        event_start_time = self.get_event_start_time(event)
+
         hits = self.hits[hit_ref]
         cmap = plt.cm.get_cmap('plasma')
         norm = matplotlib.colors.Normalize(vmin=min(self.hits[hit_ref]['q']),vmax=max(self.hits[hit_ref]['q']))
@@ -249,13 +298,14 @@ class EventDisplay:
 
         q_anode1 = hits_anode1['q'] * 0.250
         q_anode2 = hits_anode2['q'] * 0.250
-        t_anode1 = hits_anode1['ts']-event['ts_start']
-        t_anode2 = hits_anode2['ts']-event['ts_start']
+
+        t_anode1 = hits_anode1['ts']-event_start_time
+        t_anode2 = hits_anode2['ts']-event_start_time
         self.ax_time_1.hist(t_anode1, weights=q_anode1,
-                       bins=np.linspace(0,self.drift_time,200),
+                       bins=200,#np.linspace(0,self.drift_time,200),
                        histtype='step', label='binned')
         self.ax_time_2.hist(t_anode2, weights=q_anode2,
-                       bins=np.linspace(0,self.drift_time,200),
+                       bins=200,#np.linspace(0,self.drift_time,200),
                        histtype='step', label='binned')
 
         if q_anode1.any():
@@ -270,7 +320,7 @@ class EventDisplay:
         self.fig.colorbar(mcharge, cax=self.cax, label=r'Charge [$10^3$] e')
 
         if event['n_ext_trigs']:
-            trig_delta = self.ext_trigs[ext_trig_ref]['ts']-event['ts_start']
+            trig_delta = self.ext_trigs[ext_trig_ref]['ts']-event_start_time
             for trig in trig_delta:
                 self.ax_time_1.axvline(x=trig,c='g')
                 self.ax_time_2.axvline(x=trig,c='g')
@@ -283,6 +333,15 @@ class EventDisplay:
             track_start = tracks['start']
             track_end = tracks['end']
             for i,track in enumerate(tracks):
+
+                hit_trk_ref = track['hit_ref']
+                hits_trk = self.hits[hit_trk_ref]
+
+		        # Difference between the z coordinate using the event ts_start (used in the track fitter)
+                # and the start time found by get_event_start_time
+                z_correction = (self._get_z_coordinate(hits_trk['iogroup'][0], hits_trk['iochannel'][0], event_start_time)
+                                -self._get_z_coordinate(hits_trk['iogroup'][0], hits_trk['iochannel'][0], event['ts_start']))
+
                 self.ax_xy.plot((track_start[i][0],track_end[i][0]),
                                 (track_start[i][1],track_end[i][1]),
                                 c='C{}'.format(i+1), alpha=0.75, lw=1)
@@ -290,17 +349,18 @@ class EventDisplay:
                 self.ax_zy.plot((track_start[i][2],track_end[i][2]),
                                 (track_start[i][1],track_end[i][1]),
                                 c='C{}'.format(i+1), alpha=0.75, lw=1)
-                hit_trk_ref = track['hit_ref']
-                hits_trk = self.hits[hit_trk_ref]
 
                 hits_anode1 = hits_trk[hits_trk['iogroup'] == 1]
                 hits_anode2 = hits_trk[hits_trk['iogroup'] == 2]
 
                 self.ax_xy.scatter(hits_trk['px'], hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
-                hitz = [self._get_z_coordinate(io_group, io_channel, time) for io_group, time in zip(hits_trk['iogroup'], hits_trk['iochannel'], hits_trk['ts']-event['ts_start'])]
+
+
+                hitz = [self._get_z_coordinate(io_group, io_channel, time) for io_group, io_channel, time in zip(hits_trk['iogroup'], hits_trk['iochannel'], hits_trk['ts']-track['t0'])]
 
                 self.ax_zy.scatter(hitz, hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
                 self.ax_xyz.scatter(hits_trk['px'], hitz, hits_trk['py'], lw=0.2, ec='C{}'.format(i+1), c=cmap(norm(hits_trk['q'])), s=5,alpha=0.75)
+
                 self.ax_xyz.plot((track_start[i][0],track_end[i][0]),
                                  (track_start[i][2],track_end[i][2]),
                                  (track_start[i][1],track_end[i][1]),
@@ -317,7 +377,7 @@ class EventDisplay:
             for i in range(cmap.N):
                 my_cmap[i,:-1] = my_cmap[i,:-1] * alphas[i] + BG * (1.-alphas[i])
             my_cmap = ListedColormap(my_cmap)
-            hitz = [self._get_z_coordinate(io_group, io_channel, time) for io_group, io_channel, time in zip(unassoc_hits['iogroup'], unassoc_hits['iochannel'], unassoc_hits['ts']-event['ts_start'])]
+            hitz = [self._get_z_coordinate(io_group, io_channel, time) for io_group, io_channel, time in zip(unassoc_hits['iogroup'], unassoc_hits['iochannel'], unassoc_hits['ts']-event_start_time)]
             self.ax_xyz.scatter(unassoc_hits['px'], hitz, unassoc_hits['py'], lw=0.2, ec='C0', c= my_cmap(norm(unassoc_hits['q'])), s=5,alpha=0.75)
             self.ax_xy.scatter(unassoc_hits['px'], unassoc_hits['py'], lw=0.2, ec='C0', c=my_cmap(norm(unassoc_hits['q'])), s=5,alpha=0.75)
             self.ax_zy.scatter(hitz, unassoc_hits['py'], lw=0.2, ec='C0', c=my_cmap(norm(unassoc_hits['q'])), s=5,alpha=0.75)

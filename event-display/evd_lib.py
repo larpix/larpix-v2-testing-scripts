@@ -16,47 +16,47 @@ region_ref = h5py.special_dtype(ref=h5py.RegionReference)
 class NonThread(object):
     def __init__(self,target):
         self.target = target
-        
+
     def start(self):
         self.target()
-        
+
     def join(self):
         pass
-    
+
     def is_alive(self):
         return False
-    
+
 class keydefaultdict(defaultdict):
     def __missing__(self,key):
         rv = self[key] = self.default_factory(key)
-        return rv 
+        return rv
 
 class ExternalTriggerFinder(object):
     '''
     A class to extract external triggers from packet arrays
-    
+
     This class has two parameters: `pacman_trigger_enabled` and `larpix_trigger_channels`
-    
+
     The parameter `pacman_trigger_enabled` configures the `ExternalTriggerFinder` to
     extract packets of `packet_type == 7` as external triggers
-    
+
     The parameter `larpix_trigger_channels` configures the `ExternalTriggerFinder` to
     extract triggers on particular larpix channels as external triggers. To specify,
     this parameter should be a dict of `<chip-key>: [<channel id>]` pairs. A special
     chip key of `'All'` can be used in the event that all triggers on a particular
     channel of any chip key should be extracted as external triggers.
-    
+
     You can access and set the parameters at initialization::
-    
+
         etf = ExternalTriggerFinder(pacman_trigger_enabled=True, larpix_trigger_channels=dict())
-        
+
     or via the getter/setters::
-    
+
         etf.get_parameters() # dict(pacman_trigger_enabled=True, larpix_trigger_channels=dict())
         etf.get_parameters('pacman_trigger_enabled') # dict(pacman_trigger_enabled=True)
-        
+
         etf.set_parameters(pacman_trigger_enabled=True, larpix_trigger_channels={'1-1-1':[0]})
-    
+
     '''
     def __init__(self, pacman_trigger_enabled=True, larpix_trigger_channels=None):
         if larpix_trigger_channels is None:
@@ -79,12 +79,12 @@ class ExternalTriggerFinder(object):
     def fit(self, events, metadata=None):
         '''
         Pull external triggers from hit data within each event. No metadata is used.
-        
-        Trigger types are inherited from the pacman trigger type bits (with 
+
+        Trigger types are inherited from the pacman trigger type bits (with
         `pacman_trigger_enabled`) or are given a value of `-1` for larpix external triggers.
-        
+
         :returns: a list of a list of dicts (one list for each event), each dict describes a single external trigger with the following keys: `ts`-trigger timestamp, `type`-trigger type, `mask`-mask for which packets within the event are included in the trigger
-        
+
         '''
         if metadata is None:
             metadata = list()
@@ -135,22 +135,22 @@ class ExternalTriggerFinder(object):
                             mask=mask.astype(bool)
                             ))
         return event_trigs
-
+import numba as nb
 class TrackFitter(object):
     '''
     A class to extract tracks from packet arrays
-    
+
     You can access and set the parameters at initialization::
-    
+
         tf = TrackFitter(vd=1.648, clock_period=0.1, ...)
-        
+
     or via the getter/setters::
-    
+
         tf.get_parameters() # dict(vd=1.648, clock_period=0.1, ...)
         tf.get_parameters('vd') # dict(vd=1.648)
-        
+
         tf.set_parameters(vd=1.7)
-    
+
     '''
     def __init__(self, dbscan_eps=14, dbscan_min_samples=5, vd=1.648, clock_period=0.1,
                  ransac_min_samples=2, ransac_residual_threshold=8, ransac_max_trials=100):
@@ -180,10 +180,10 @@ class TrackFitter(object):
 
             vd:                        drift velocity [mm/us]
             clock_period:              clock period for timestamp [us]
-            
+
             dbscan_eps:                epsilon used for clustering [mm]
             dbscan_min_samples:        min samples used for clustering
-            
+
             ransac_min_samples:        min samples used for outlier detection
             ransac_residual_threshold: residual threshold used for outlier detection [mm]
             ransac_max_trials:         max trials used for outlier detection
@@ -238,8 +238,14 @@ class TrackFitter(object):
         pca = self.pca.fit(xyz[mask] - centroid)
         axis = pca.components_[0] / np.linalg.norm(pca.components_[0])
         return centroid, axis
-    
-    def _get_z_coordinate(self, tile_geometry, tile_id, time):
+
+
+    def _get_z_coordinate(self, io_to_tile, tile_geometry, io_group, io_channel, time):
+        if (io_group, io_channel) not in io_to_tile:
+            #print("IO group %i, IO channel %i not found" % (io_group, io_channel))
+            return 0
+
+        tile_id = io_to_tile[io_group, io_channel]
         z_anode = tile_geometry[tile_id][0][0]
         drift_direction = tile_geometry[tile_id][1][0]
 
@@ -248,19 +254,20 @@ class TrackFitter(object):
     def fit(self, event, metadata=None, plot=False):
         '''
         Extract tracks from a given event packet array
-        
+
         Accepts geometry metadata and external trigger metadata (optional).
         Geometry should be specified as a dict of `(chip_id, channel_id)` pairs,
         and external triggers should be specified with a list of dicts containing
         `type` and `ts` keys.
-        
+
         :returns: list of dicts (one for each track) containing keys: `track_id`-unique id within event, `mask`-mask for which packets are included in track, `centroid`-x,y,z centroid of track relative to `t0`, `axis`-track x,y,z axis, `residual`-x,y,z residuals, `length`-track length, `start`-x,y,z,t of track start point, `end`-x,y,z,t of track end point, `t0`-t0 timestamp used for track
-        
+
         '''
         if metadata is None:
             metadata = dict()
         trigs    = metadata.get('trigs',list())
         geometry = metadata.get('geometry',dict())
+
 #         if trigs_list is None:
 #             trigs_list = [list()]*len(events)
 #         for event,trigs in zip(events,trigs_list):
@@ -270,13 +277,15 @@ class TrackFitter(object):
         if len(event) < 2: return list()#continue
         if trigs:
             t0 = np.min([trig['ts'] for trig in trigs]).astype(int)
+            t0_type = 1
         else:
             t0 = event['timestamp'][0].astype(int)
+            t0_type = 0
         iter_mask = np.ones(len(event)).astype(bool)
         while True:
             if metadata['tile_geometry']:
-                xyz = np.array([(*geometry[(io_group, io_channel, chip_id, channel_id)],self._get_z_coordinate(metadata['tile_geometry'],io_group,ts-t0))
-                    for io_group, io_channel, chip_id, channel_id, ts in zip(event['io_group'], event['io_channel'], event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
+                xyz = np.array([(*geometry[(io_group, io_channel, chip_id, channel_id)],self._get_z_coordinate(metadata['io_to_tile'],metadata['tile_geometry'],io_group,io_channel,ts-t0))
+                    for io_group, io_channel, chip_id, channel_id, ts in zip(event['io_group'], event['io_channel'], event['chip_id'], event['channel_id'], event['timestamp'])])
             else:
                 xyz = np.array([(*geometry[(1,1,chip_id, channel_id)],(ts-t0)*self._z_scale) for chip_id, channel_id, ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
             # dbscan to find clusters
@@ -312,7 +321,8 @@ class TrackFitter(object):
                         length=np.linalg.norm(r_max[:3]-r_min[:3]),
                         start=r_min,
                         end=r_max,
-                        t0=t0
+                        t0=t0,
+                        t0_type=t0_type
                     ))
                 iter_mask[mask] = 0
 
@@ -363,7 +373,7 @@ class LArPixEVDFile(object):
             ('phi', 'f8'), ('xp', 'f8'), ('yp', 'f8'), ('nhit', 'i8'),
             ('q', 'f8'), ('ts_start', 'i8'), ('ts_end', 'i8'),
             ('residual', 'f8', (3,)), ('length', 'f8'), ('start', 'f8', (4,)),
-            ('end', 'f8', (4,)), ('q_raw', 'f8')
+            ('end', 'f8', (4,)), ('q_raw', 'f8'), ('t0_type', 'u1')
         ],
         'ext_trigs' : [
             ('trig_id', 'i8'), ('event_ref', region_ref), ('ts', 'i8'), ('type', 'u1')
@@ -373,11 +383,11 @@ class LArPixEVDFile(object):
     @staticmethod
     def _default_pxy():
         return (0.,0.)
-    
+
     @staticmethod
     def _rotate_pixel(pixel_pos, tile_orientation):
         return pixel_pos[0]*tile_orientation[2], pixel_pos[1]*tile_orientation[1]
-        
+
 
     def __init__(self, filename, source_file=None, configuration_file=None, geometry_file=None,
                  pedestal_file=None, builder_config=None, fitter_config=None, buffer_len=2048,
@@ -419,26 +429,38 @@ class LArPixEVDFile(object):
                 y_size = max(ys)-min(ys)+pixel_pitch
                 n_pixels_per_tile = len(np.unique(xs)), len(np.unique(ys))
 
+                self.io_group_io_channel_to_tile = {}
                 for tile in geometry_yaml['tile_chip_to_io']:
                     tile_orientation = tile_orientations[tile]
                     self.tile_geometry[tile] = tile_positions[tile], tile_orientations[tile]
+                    for chip in geometry_yaml['tile_chip_to_io'][tile]:
+                        io_group_io_channel = geometry_yaml['tile_chip_to_io'][tile][chip]
+                        io_group = io_group_io_channel//1000
+                        io_channel = io_group_io_channel%1000
+                        self.io_group_io_channel_to_tile[(io_group,io_channel)]=tile
+
+
                     for chip_channel in geometry_yaml['chip_channel_to_position']:
                         chip = chip_channel // 1000
                         channel = chip_channel % 1000
                         try:
                             io_group_io_channel = geometry_yaml['tile_chip_to_io'][tile][chip]
-                            io_group = io_group_io_channel // 1000
-                            io_channel = io_group_io_channel % 1000
-                            x = chip_channel_to_position[chip_channel][0] * pixel_pitch + pixel_pitch / 2 - x_size / 2
-                            y = chip_channel_to_position[chip_channel][1] * pixel_pitch + pixel_pitch / 2 - y_size / 2
-
-                            x, y = self._rotate_pixel((x, y), tile_orientation)
-                            x += tile_positions[tile][2] + tpc_centers[tile_indeces[tile][1]][0]
-                            y += tile_positions[tile][1] + tpc_centers[tile_indeces[tile][1]][1]
-            
-                            self.geometry[(io_group,io_channel,chip,channel)] = x,y
                         except KeyError:
-                            print("Chip %i not present in network" % chip)
+                            #print("Chip %i on tile %i not present in network" % (chip,tile))
+                            continue
+
+                        io_group = io_group_io_channel // 1000
+                        io_channel = io_group_io_channel % 1000
+                        x = chip_channel_to_position[chip_channel][0] * pixel_pitch + pixel_pitch / 2 - x_size / 2
+                        y = chip_channel_to_position[chip_channel][1] * pixel_pitch + pixel_pitch / 2 - y_size / 2
+
+                        x, y = self._rotate_pixel((x, y), tile_orientation)
+                        x += tile_positions[tile][2] + tpc_centers[tile_indeces[tile][1]][0]
+                        y += tile_positions[tile][1] + tpc_centers[tile_indeces[tile][1]][1]
+
+                        self.geometry[(io_group,io_channel,chip,channel)] = x,y
+
+                print(self.io_group_io_channel_to_tile)
             else:
                 import larpixgeometry.layouts
                 geo = larpixgeometry.layouts.load(self.geometry_file) # open geometry yaml file
@@ -467,7 +489,7 @@ class LArPixEVDFile(object):
             with open(self.configuration_file,'r') as infile:
                 for key,value in json.load(infile).items():
                     self.configuration[key] = value
-                    
+
         # electron lifetime lookup
         self.electron_lifetime_f = lambda unix,ts: 1.
         self.electron_lifetime_file = electron_lifetime_file
@@ -482,7 +504,7 @@ class LArPixEVDFile(object):
                 infile.Close()
             else:
                 self.electron_lifetime_file = None
-                    
+
         self.source_file = source_file
 
         fitter_config = fitter_config if fitter_config else dict()
@@ -580,7 +602,7 @@ class LArPixEVDFile(object):
     #                     tracks_list = self.track_fitter.fit(events_list, self.geometry, trigs_list=trigs_list) \
     #                         if self.fit_tracks else [list() for i in range(len(events_list))]
                 tracks_list = [self.track_fitter.fit(
-                            ev, dict(geometry=self.geometry, trigs=trigs_list[i], tile_geometry=self.tile_geometry)) \
+                            ev, dict(geometry=self.geometry, trigs=trigs_list[i], io_to_tile=self.io_group_io_channel_to_tile, tile_geometry=self.tile_geometry)) \
                         for i,ev in enumerate(events_list)] \
                     if self.fit_tracks else [list() for i in range(len(events_list))]
 
@@ -640,9 +662,9 @@ class LArPixEVDFile(object):
                                           + event['channel_id'].astype(int)
                         hit_uniqueid_str = hit_uniqueid.astype(str)
                         if self.is_multi_tile:
-                            xy   = np.array([self.geometry[(io_group, io_channel, chip_id, channel_id)] 
+                            xy   = np.array([self.geometry[(io_group, io_channel, chip_id, channel_id)]
                                              for io_group, io_channel, chip_id, channel_id in zip(event['io_group'],event['io_channel'],event['chip_id'],event['channel_id'])])
-                        else: 
+                        else:
                             xy   = np.array([self.geometry[(1,1,(unique_id//64)%256,unique_id%64)] for unique_id in hit_uniqueid])
 
                         vref = np.array([self.configuration[unique_id]['vref_mv'] for unique_id in hit_uniqueid_str])
@@ -670,8 +692,10 @@ class LArPixEVDFile(object):
                         tracks_dict['start']       = np.zeros((len(tracks),4))
                         tracks_dict['end']         = np.zeros((len(tracks),4))
                         tracks_dict['t0']          = np.zeros((len(tracks),))
+                        tracks_dict['t0_type']     = np.zeros((len(tracks),))
                         for i,track in enumerate(tracks):
                             tracks_dict['t0'][i]        = track['t0']
+                            tracks_dict['t0_type'][i]   = track['t0_type']
                             tracks_dict['nhit'][i]      = np.sum(track['mask'])
                             tracks_dict['q_raw'][i]     = np.sum(hits_dict['q_raw'][track['mask']])
                             hits_dict['q'][track['mask']] = hits_dict['q_raw'][track['mask']] \
