@@ -496,7 +496,6 @@ class LArPixEVDFile(object):
                         self.geometry[(io_group, io_channel,
                                        chip, channel)] = x, y
 
-                print(self.io_group_io_channel_to_tile)
             else:
                 import larpixgeometry.layouts
                 geo = larpixgeometry.layouts.load(
