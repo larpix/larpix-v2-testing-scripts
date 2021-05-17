@@ -138,8 +138,8 @@ class SymmetricWindowEventBuilder(EventBuilder):
             threshold   - number of correlated hits to initiate event
 
     '''
-    default_window = 1820
-    default_threshold = 25
+    default_window = 1820//2
+    default_threshold = 10
 
     def __init__(self, **params):
         super(SymmetricWindowEventBuilder, self).__init__(**params)
@@ -173,8 +173,9 @@ class SymmetricWindowEventBuilder(EventBuilder):
         event_mask[1:] = event_mask[1:] | (hist > self.threshold)[:-1]
 
         # find rising/falling edges
-        event_start_timestamp = bin_edges[:-2][np.diff(event_mask.astype(int)) > 0]
-        event_end_timestamp = bin_edges[2:][np.diff(event_mask.astype(int)) < 0]
+        event_edges = np.diff(event_mask.astype(int))
+        event_start_timestamp = bin_edges[1:-1][event_edges > 0]
+        event_end_timestamp = bin_edges[1:-1][event_edges < 0]
 
         if not np.any(event_mask):
             # no events
