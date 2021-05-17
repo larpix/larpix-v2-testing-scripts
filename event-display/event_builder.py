@@ -51,7 +51,7 @@ class TimeDeltaEventBuilder(EventBuilder):
     default_max_event_dt = 1820 * 3
 
     def __init__(self, **params):
-        super(EventBuilder, self).__init__(**params)
+        super(TimeDeltaEventBuilder, self).__init__(**params)
         self.event_dt = params.get('event_dt', self.default_event_dt)
         self.max_event_dt = params.get('max_event_dt', self.default_max_event_dt)
 
@@ -142,7 +142,7 @@ class SymmetricWindowEventBuilder(EventBuilder):
     default_threshold = 25
 
     def __init__(self, **params):
-        super(EventBuilder, self).__init__(**params)
+        super(SymmetricWindowEventBuilder, self).__init__(**params)
         self.window = params.get('window', self.default_window)
         self.threshold = params.get('threshold', self.default_threshold)
 
