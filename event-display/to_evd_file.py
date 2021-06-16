@@ -3,6 +3,7 @@ import json
 import argparse
 import time
 import warnings
+import os
 
 from evd_lib import *
 from event_builder import *
@@ -66,7 +67,7 @@ def main(in_filename, out_filename, *args,
     packet_counter = 0
 
     # create buffered output file
-    with open('VERSION','r') as fi:
+    with open(os.path.join(os.path.dirname(__file__),'VERSION'),'r') as fi:
         version = fi.readlines()[0].strip()
     evd_file = LArPixEVDFile(
         out_filename,
