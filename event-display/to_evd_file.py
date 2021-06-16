@@ -28,6 +28,7 @@ _default_skip_trigger_finding   = False
 _default_force                  = False
 _default_electron_lifetime_file = None
 _default_sync_noise_cut         = 100000
+_default_ts_correction          = None
 
 def add_event(evd_file, event, unix_ts):
     event_timestamp,counts = np.unique(unix_ts['timestamp'], return_counts=True)
@@ -53,6 +54,7 @@ def main(in_filename, out_filename, *args,
          force=_default_force,
          electron_lifetime_file=_default_electron_lifetime_file,
          sync_noise_cut=_default_sync_noise_cut,
+         ts_correction=_default_ts_correction,
          **kwargs):
     # load larpix file
     larpix_logfile = load_larpix_logfile(in_filename)
@@ -84,7 +86,8 @@ def main(in_filename, out_filename, *args,
             vd                 = vd,
             clock_period       = clock_period,
             dbscan_eps         = dbscan_eps,
-            dbscan_min_samples = dbscan_min_samples
+            dbscan_min_samples = dbscan_min_samples,
+            ts_correction      = ts_correction,
             ),
         fit_tracks             = not skip_track_fit,
         trigger_finder_config  = external_trigger_conf,
@@ -181,6 +184,7 @@ if __name__ == '__main__':
     parser.add_argument('--force','-f',action='store_true',help='''overwrite file if it exists''')
     parser.add_argument('--electron_lifetime_file',default=_default_electron_lifetime_file,type=str,help='''file containing electron lifetime calibration''')
     parser.add_argument('--sync_noise_cut',default=_default_sync_noise_cut,type=int,help='''Remove events with a timestamp less than this''')
+    parser.add_argument('--ts_correction',default=_default_ts_correction,type=json.loads,help='''Timestamp correction per PACMAN (json-formatted dict of iogroup: (offset, slope) pairs)''')
     args = parser.parse_args()
     
     warnings.simplefilter('once')

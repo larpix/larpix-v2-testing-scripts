@@ -154,7 +154,8 @@ class TrackFitter(object):
     
     '''
     def __init__(self, dbscan_eps=14, dbscan_min_samples=5, vd=1.648, clock_period=0.1,
-                 ransac_min_samples=2, ransac_residual_threshold=8, ransac_max_trials=100):
+                 ransac_min_samples=2, ransac_residual_threshold=8, ransac_max_trials=100,
+                 ts_correction=None):
         self._vd = vd
         self._clock_period = clock_period
         self._dbscan_eps = dbscan_eps
@@ -162,6 +163,11 @@ class TrackFitter(object):
         self._ransac_min_samples = ransac_min_samples
         self._ransac_residual_threshold = ransac_residual_threshold
         self._ransac_max_trials = ransac_max_trials
+
+        self._ts_correction = defaultdict(lambda : (0., 0.))
+        if ts_correction is not None:
+            for key,val in ts_correction.items():
+                self._ts_correction[int(key)] = val
 
         self.set_parameters()
         self.pca = dcomp.PCA(n_components=1)
@@ -189,6 +195,8 @@ class TrackFitter(object):
             ransac_residual_threshold: residual threshold used for outlier detection [mm]
             ransac_max_trials:         max trials used for outlier detection
 
+            ts_correction:             dict of iogroup: (offset, slope) for pacman clock drift
+
         '''
         self._vd = kwargs.get('vd',self._vd)
         self._clock_period = kwargs.get('clock_period',self._clock_period)
@@ -201,6 +209,11 @@ class TrackFitter(object):
         self._min_samples = kwargs.get('ransac_min_samples',self._ransac_min_samples)
         self._residual_threshold = kwargs.get('ransac_residual_threshold',self._ransac_residual_threshold)
         self._max_trials = kwargs.get('ransac_max_trials',self._ransac_max_trials)
+
+        ts_correction = kwargs.get('ts_correction',self._ts_correction)
+        if ts_correction:
+            for key,val in ts_correction.items():
+                self._ts_correction[int(key)] = val
 
     def _plot_dbscan(self,xyz):
         print('plotting for dbscan tuning...')
@@ -285,8 +298,11 @@ class TrackFitter(object):
         iter_mask = np.ones(len(event)).astype(bool)
         while True:
             if metadata['tile_geometry']:
+                ts_corrected = [(ts - self._ts_correction[io_group][0]) / (1. + self._ts_correction[io_group][1]) for ts, io_group in zip(event['timestamp'],event['io_group'])]
                 xyz = np.array([(*geometry[(io_group, io_channel, chip_id, channel_id)],self._get_z_coordinate(metadata['io_to_tile'],metadata['tile_geometry'],io_group,io_channel,ts-t0))
-                    for io_group, io_channel, chip_id, channel_id, ts in zip(event['io_group'], event['io_channel'], event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
+                    for io_group, io_channel, chip_id, channel_id, ts in zip(event['io_group'], event['io_channel'], event['chip_id'], event['channel_id'], ts_corrected)])
+                #xyz = np.array([(*geometry[(io_group, io_channel, chip_id, channel_id)],self._get_z_coordinate(metadata['io_to_tile'],metadata['tile_geometry'],io_group,io_channel,ts-t0))
+                #    for io_group, io_channel, chip_id, channel_id, ts in zip(event['io_group'], event['io_channel'], event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
             else:
                 xyz = np.array([(*geometry[(1,1,chip_id, channel_id)],(ts-t0)*self._z_scale) for chip_id, channel_id, ts in zip(event['chip_id'], event['channel_id'], event['timestamp'].astype(int))])
             # dbscan to find clusters
