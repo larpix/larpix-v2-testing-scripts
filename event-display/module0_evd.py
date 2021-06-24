@@ -25,15 +25,31 @@ plt.ion()
 
 class EventDisplay:
 
+    module0_flow_flag = False
+
     def __init__(self, filename, geometry_file=None, nhits=1):
         f = h5py.File(filename, 'r')
 
-        events = f['events']
-        self.events = events[events['nhit'] > nhits]
-        self.tracks = f['tracks'] if 'tracks' in f.keys() else None
-        self.hits = f['hits']
-        self.ext_trigs = f['ext_trigs'] if 'ext_trigs' in f.keys() else None
-        self.info = f['info'].attrs
+        try:
+            events = f['events']
+            self.events = events[events['nhit'] > nhits]
+            self.tracks = f['tracks'] if 'tracks' in f.keys() else None
+            self.hits = f['hits']
+            self.ext_trigs = f['ext_trigs'] if 'ext_trigs' in f.keys() else None
+            self.info = f['info'].attrs
+        except KeyError:
+            self.module0_flow_flag = True
+
+            events = f['charge/events/data']
+            self.events = events[events['nhit'] > nhits]
+            self.tracks = None
+            self.hits = f['charge/hits/data']
+            self.hits_ref = f['charge/events/ref/charge/hits/ref']
+            self.hits_region = f['charge/events/ref/charge/hits/ref_region']
+            self.ext_trigs = f['charge/ext_trigs/data']
+            self.ext_trigs_ref = f['charge/events/ref/charge/ext_trigs/ref']
+            self.ext_trigs_region = f['charge/events/ref/charge/ext_trigs/ref_region']
+            self.info = None
 
         self.fig = plt.figure(constrained_layout=False, figsize=(8.5, 6.))
         gs_xyzy = self.fig.add_gridspec(nrows=1, ncols=3, top=0.93, width_ratios=[1, 1, 0.05],
@@ -102,7 +118,8 @@ class EventDisplay:
 
         self.drift_length = abs(tile_positions[0][0])
         self.drift_time = self.drift_length / \
-            self.info['vdrift']/self.info['clock_period']
+            self.info['vdrift']/self.info['clock_period'] if self.info \
+            else self.drift_length / 1.648 / 0.1
 
         for itpc, tpc_id in enumerate(tpcs):
             this_tpc_tile = tile_positions[tile_positions[:, 0] == tpc_id]
@@ -167,19 +184,31 @@ class EventDisplay:
         z_anode = self.tile_positions[tile_id-1][0]
         drift_direction = self.tile_orientations[tile_id-1][0]
 
-        return z_anode + time*self.info['vdrift']*self.info['clock_period']*drift_direction
+        return z_anode + time*self.info['vdrift']*self.info['clock_period']*drift_direction if not self.module0_flow_flag \
+            else z_anode + time * 1.648 * 0.1
 
     def get_event_start_time(self, event):
         """Estimate the event start time"""
         if event['n_ext_trigs']:
             # First Choice: Use earliest light system trigger in event
-            return self.ext_trigs[event['ext_trig_ref']]['ts'][0]
+            if self.module0_flow_flag:
+                ev_id = event['id']
+                ext_trig_ref = self.ext_trigs_ref[self.ext_trigs_region[ev_id,'start']:self.ext_trigs_region[ev_id,'stop']]
+                ext_trig_ref = np.sort(ext_trig_ref[ext_trig_ref[:,0] == ev_id, 1])
+            else:
+                ext_trig_ref = event['ext_trig_ref']
+
+            return self.ext_trigs[ext_trig_ref]['ts'][0]
         # Second Choice:
         #  Try to determine the start time from a 'bump' in charge.
         #  This is only valid if some part of the event hits one of the anodes.
         ticks_per_qsum = 10  # clock ticks per time bin
         t0_charge_threshold = 200.0  # Rough qsum threshold
-        hit_ref = event['hit_ref']
+        if self.module0_flow_flag:
+            hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
+            hit_ref = np.sort(hit_ref[hit_ref[:,0] == ev_id, 1])
+        else:
+            hit_ref = event['hit_ref']
         hits = self.hits[hit_ref]
         # determine charge vs time in enlarged window
         min_ts = np.amin(hits['ts'])
@@ -316,8 +345,15 @@ class EventDisplay:
             event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
         self.fig.suptitle("Event %i, ID %i - %s UTC" %
                           (ev_id, event['evid'], event_datetime))
-        hit_ref = event['hit_ref']
-        ext_trig_ref = event['ext_trig_ref']
+        if self.module0_flow_flag:
+            ev_id = event['id']
+            hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
+            hit_ref = np.sort(hit_ref[hit_ref[:,0] == ev_id, 1])
+            ext_trig_ref = self.ext_trigs_ref[self.ext_trigs_region[ev_id,'start']:self.ext_trigs_region[ev_id,'stop']]
+            ext_trig_ref = np.sort(ext_trig_ref[ext_trig_ref[:,0] == ev_id, 1])
+        else:
+            hit_ref = event['hit_ref']
+            ext_trig_ref = event['ext_trig_ref']
 
         event_start_time = self.get_event_start_time(event)
 
@@ -362,7 +398,7 @@ class EventDisplay:
 
         unassoc_hit_mask = np.ones(event['nhit']).astype(bool)
 
-        if event['ntracks']:
+        if 'ntracks' in event.dtype.name and event['ntracks']:
             track_ref = event['track_ref']
             tracks = self.tracks[track_ref]
             track_start = tracks['start']
