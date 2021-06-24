@@ -185,7 +185,7 @@ class EventDisplay:
         drift_direction = self.tile_orientations[tile_id-1][0]
 
         return z_anode + time*self.info['vdrift']*self.info['clock_period']*drift_direction if not self.module0_flow_flag \
-            else z_anode + time * 1.648 * 0.1
+            else z_anode + time * 1.648 * 0.1 * drift_direction
 
     def get_event_start_time(self, event):
         """Estimate the event start time"""
@@ -198,7 +198,7 @@ class EventDisplay:
             else:
                 ext_trig_ref = event['ext_trig_ref']
 
-            return self.ext_trigs[ext_trig_ref]['ts'][0]
+            return np.min(self.ext_trigs[ext_trig_ref]['ts'])
         # Second Choice:
         #  Try to determine the start time from a 'bump' in charge.
         #  This is only valid if some part of the event hits one of the anodes.
