@@ -205,6 +205,7 @@ class EventDisplay:
         ticks_per_qsum = 10  # clock ticks per time bin
         t0_charge_threshold = 200.0  # Rough qsum threshold
         if self.module0_flow_flag:
+            ev_id = event['id']
             hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
             hit_ref = np.sort(hit_ref[hit_ref[:,0] == ev_id, 1])
         else:
