@@ -269,10 +269,11 @@ class TrackFitter(object):
     def _get_z_coordinate(self, io_to_tile, tile_geometry, io_group, io_channel, this_time):
         try:
             tile_id = io_to_tile[io_group, io_channel]
-        except:
-            warnings.warn("IO group %i, IO channel %i not found" % (io_group, io_channel), RuntimeWarning)
         except KeyError:
             return 0
+        except:
+            warnings.warn("IO group %i, IO channel %i not found" % (io_group, io_channel), RuntimeWarning)
+        
 
         z_anode = tile_geometry[tile_id][0][0]
         drift_direction = tile_geometry[tile_id][1][0]
