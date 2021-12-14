@@ -352,10 +352,10 @@ class EventDisplay:
         self.set_axes()
 
         event = self.events[ev_id]
-        # event_datetime = datetime.utcfromtimestamp(
-        #     event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
-        # self.fig.suptitle("Event %i, ID %i - %s UTC" %
-        #                   (ev_id, event['evid'] if not self.module0_flow_flag else event['id'], event_datetime))
+        event_datetime = datetime.utcfromtimestamp(
+            event['unix_ts']).strftime('%Y-%m-%d %H:%M:%S')
+        self.fig.suptitle("Event %i, ID %i - %s UTC" %
+                          (ev_id, event['evid'] if not self.module0_flow_flag else event['id'], event_datetime))
         if self.module0_flow_flag:
             ev_id = event['id']
             hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
