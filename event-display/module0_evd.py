@@ -460,9 +460,8 @@ class EventDisplay:
             tracks = self.tracks[track_ref]
             track_start = tracks['start']
             track_end = tracks['end']
+
             for itrk, (ts, te) in enumerate(zip(track_start, track_end)):
-                # hit_ref = self.hits_ref[self.hits_region[ev_id,'start']:self.hits_region[ev_id,'stop']]
-            # hit_ref = np.sort(hit_ref[hit_ref[:,0] == ev_id, 1])
 
                 hit_ref = self.hits_trk_ref[self.hits_trk_region[tracks[itrk]['id'],'start']:self.hits_trk_region[tracks[itrk]['id'],'stop']]
                 hit_ref = np.sort(hit_ref[hit_ref[:,0] == tracks[itrk]['id'], 1])
