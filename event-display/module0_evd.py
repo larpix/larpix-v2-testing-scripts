@@ -42,14 +42,26 @@ class EventDisplay:
 
             events = f['charge/events/data']
             self.events = events[events['nhit'] > nhits]
-            self.tracks = None
+            try:
+                self.tracks = f['combined/tracklets/data']
+                self.tracks_ref = f['charge/events/ref/combined/tracklets/ref']
+                self.tracks_region = f['charge/events/ref/combined/tracklets/ref_region']
+                self.hits_trk_ref = f['combined/tracklets/ref/charge/hits/ref']
+                self.hits_trk_region = f['combined/tracklets/ref/charge/hits/ref_region']
+                self.hits_drift = f['combined/hit_drift/data']
+            except KeyError:
+                print("No tracklets found")
             self.hits = f['charge/hits/data']
             self.hits_ref = f['charge/events/ref/charge/hits/ref']
             self.hits_region = f['charge/events/ref/charge/hits/ref_region']
             self.ext_trigs = f['charge/ext_trigs/data']
             self.ext_trigs_ref = f['charge/events/ref/charge/ext_trigs/ref']
             self.ext_trigs_region = f['charge/events/ref/charge/ext_trigs/ref_region']
-            self.info = None
+            self.info = {
+                'vdrift': f['lar_info'].attrs['v_drift'],
+                'clock_period': 0.1,
+            }
+
 
         self.fig = plt.figure(constrained_layout=False, figsize=(8.5, 6.))
         gs_xyzy = self.fig.add_gridspec(nrows=1, ncols=3, top=0.93, width_ratios=[1, 1, 0.05],
@@ -183,9 +195,7 @@ class EventDisplay:
 
         z_anode = self.tile_positions[tile_id-1][0]
         drift_direction = self.tile_orientations[tile_id-1][0]
-
-        return z_anode + time*self.info['vdrift']*self.info['clock_period']*drift_direction if not self.module0_flow_flag \
-            else z_anode + time * 1.648 * 0.1 * drift_direction
+        return z_anode + time*self.info['vdrift']*self.info['clock_period']*drift_direction
 
     def get_event_start_time(self, event):
         """Estimate the event start time"""
@@ -442,6 +452,43 @@ class EventDisplay:
                                  c='C{}'.format(i+1), alpha=0.5, lw=4)
 
                 unassoc_hit_mask[np.in1d(hits['hid'], hits_trk['hid'])] = 0
+
+        if self.module0_flow_flag:
+            ev_id = event['id']
+            track_ref = self.tracks_ref[self.tracks_region[ev_id,'start']:self.tracks_region[ev_id,'stop']]
+            track_ref = np.sort(track_ref[track_ref[:,0] == ev_id, 1])
+            tracks = self.tracks[track_ref]
+            track_start = tracks['start']
+            track_end = tracks['end']
+
+            for itrk, (ts, te) in enumerate(zip(track_start, track_end)):
+
+                hit_ref = self.hits_trk_ref[self.hits_trk_region[tracks[itrk]['id'],'start']:self.hits_trk_region[tracks[itrk]['id'],'stop']]
+                hit_ref = np.sort(hit_ref[hit_ref[:,0] == tracks[itrk]['id'], 1])
+
+                hits_trk = self.hits[hit_ref]
+                hits_drift_trk = self.hits_drift[hit_ref]
+
+                self.ax_xyz.scatter(hits_trk['px'], hits_drift_trk['z'], hits_trk['py'], lw=0.2, ec='C{}'.format(
+                    itrk+1), c=cmap(norm(hits_trk['q'])), s=5, alpha=0.75)
+                self.ax_zy.scatter(hits_drift_trk['z'], hits_trk['py'], lw=0.2, ec='C{}'.format(
+                    itrk+1), c=cmap(norm(hits_trk['q'])), s=5, alpha=0.75)
+                self.ax_xy.scatter(hits_trk['px'], hits_trk['py'], lw=0.2, ec='C{}'.format(
+                    itrk+1), c=cmap(norm(hits_trk['q'])), s=5, alpha=0.75)
+
+                self.ax_xy.plot((ts[0], te[0]),
+                                (ts[1], te[1]),
+                                c='C{}'.format(itrk+1), alpha=0.75, lw=1)
+
+                self.ax_zy.plot((ts[2], te[2]),
+                                (ts[1], te[1]),
+                                c='C{}'.format(itrk+1), alpha=0.75, lw=1)
+                self.ax_xyz.plot((ts[0], te[0]),
+                                 (ts[2], te[2]),
+                                 (ts[1], te[1]),
+                                 c='C{}'.format(itrk+1), alpha=0.5, lw=4)
+
+                unassoc_hit_mask[np.in1d(hits['id'], hits_trk['id'])] = 0
 
         if np.any(unassoc_hit_mask):
             unassoc_hits = hits[unassoc_hit_mask]
