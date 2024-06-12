@@ -3,8 +3,7 @@ import time
 import json
 import h5py
 import numpy as np
-
-import larpix
+from pathlib import Path
 
 _default_vdda = 1800
 _default_vref_dac = 217
@@ -55,17 +54,16 @@ def main(infile, vdda=_default_vdda, vref_dac=_default_vref_dac,
         config_dict[str(unique)] = dict(
             pedestal_mv=adc2mv(ped_adc,vref_mv,vcm_mv)
             )
-    with open(infile.strip('.h5')+'evd_ped.json','w') as fo:
+    with open(Path(infile).name.strip('.h5')+'evd_ped.json','w') as fo:
         json.dump(config_dict, fo, sort_keys=True, indent=4)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='''
-        A script for generating pedestal configurations used by the to_evd_file.py
-        script. To use, specify the ``controller_config`` that was used for the
-        pedestal run, the path to the pedestal datafile, and the settings used
-        for the pedestal run (vdda,vref,vcm). This script will then take the
-        truncated mean for each channel's adc values and store them in pedestal
-        config file.'''
+        A script for generating pedestal configurations used by the
+        to_evd_file.py script. To use, specify the path to the pedestal
+        datafile, and the settings used for the pedestal run (vdda,vref,vcm).
+        This script will then take the truncated mean for each channel's adc
+        values and store them in pedestal config file.'''
         )
     parser.add_argument('--infile','-i',required=True,type=str)
     parser.add_argument('--vdda',default=_default_vdda,type=float,help='''default=%(default)s mV''')
