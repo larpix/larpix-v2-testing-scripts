@@ -38,22 +38,21 @@ def main(infile, vdda=_default_vdda, vref_dac=_default_vref_dac,
     vref_mv = dac2mv(vref_dac,vdda)
     vcm_mv = dac2mv(vcm_dac,vdda)
 
-    vals_dict={}
-    nums_dict={}
+    vals_dict={} # Dictionary to be later used for storing arrays containing the datawords for each channel
     
-    for i in range(len(unique_id)):
-       unique = unique_id[i]
-       vals_dict[unique] = 0
-       nums_dict[unique] = 0
+    for unique in unique_id_set:
+       vals_dict[unique] = [] # Initialising the dictionary with arrays
 
     for i in range(len(unique_id)):
        unique = unique_id[i]
        data = dataword[i]
-       vals_dict[unique] += data
-       nums_dict[unique] += 1.
-       
+       vals_dict[unique].append(data) # Adding the data to the arrays
+ 
     for unique in unique_id_set:
-        ped_adc = vals_dict[unique] / nums_dict[unique]
+        vals, bins = np.histogram(vals_dict[unique], bins = np.arange(257))
+        peak_bin = np.argmax(vals)
+        min_idx,max_idx = max(peak_bin-mean_trunc,0), min(peak_bin+mean_trunc,len(vals))
+        ped_adc = np.average(bins[min_idx:max_idx]+0.5, weights=vals[min_idx:max_idx])
         config_dict[str(unique)] = dict(
             pedestal_mv = adc2mv(ped_adc, vref_mv, vcm_mv)
             )
