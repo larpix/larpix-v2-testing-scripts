@@ -34,29 +34,28 @@ def main(infile, vdda=_default_vdda, vref_dac=_default_vref_dac,
     now = time.time()
     config_dict = dict()
     dataword = f['packets'][good_data_mask]['dataword']
-    hist_dict={}
 
     vref_mv = dac2mv(vref_dac,vdda)
     vcm_mv = dac2mv(vcm_dac,vdda)
 
-    for unique in unique_id_set:
-        hist_dict[unique] = Hist(hist.axis.Regular(bins = 257, start = 0, stop = 256))
-        
+    vals_dict={}
+    nums_dict={}
+    
     for i in range(len(unique_id)):
-        unique = unique_id[i]
-        data = dataword[i]
-        histog = hist_dict[unique]
-        histog.fill(data)
-       
-    bins = np.arange(257)
+       unique = unique_id[i]
+       vals_dict[unique] = 0
+       nums_dict[unique] = 0
 
+    for i in range(len(unique_id)):
+       unique = unique_id[i]
+       data = dataword[i]
+       vals_dict[unique] += data
+       nums_dict[unique] += 1.
+       
     for unique in unique_id_set:
-        vals = ( hist_dict[unique] ).view()
-        peak_bin = np.argmax(vals)
-        min_idx,max_idx = max(peak_bin-mean_trunc,0), min(peak_bin+mean_trunc,len(vals))
-        ped_adc = np.average(bins[min_idx:max_idx]+0.5, weights=vals[min_idx:max_idx])
+        ped_adc = vals_dict[unique] / nums_dict[unique]
         config_dict[str(unique)] = dict(
-            pedestal_mv=adc2mv(ped_adc,vref_mv,vcm_mv)
+            pedestal_mv = adc2mv(ped_adc, vref_mv, vcm_mv)
             )
         
     with open(Path(infile).name.strip('.h5')+'evd_ped.json','w') as fo:
