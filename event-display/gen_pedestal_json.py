@@ -35,28 +35,31 @@ def main(infile, vdda=_default_vdda, vref_dac=_default_vref_dac,
     config_dict = dict()
     dataword = f['packets'][good_data_mask]['dataword']
 
+    vref_mv = dac2mv(vref_dac,vdda)
+    vcm_mv = dac2mv(vcm_dac,vdda)
+
+    vals_dict={} # Dictionary to be later used for storing arrays containing the datawords for each channel
+    
     for unique in unique_id_set:
-        counter += 1
-        if time.time() > now + 1:
-            print('{}/{}\r'.format(counter,total),end='')
-            now = time.time()
-        vref_mv = dac2mv(vref_dac,vdda)
-        vcm_mv = dac2mv(vcm_dac,vdda)
-        channel_mask = unique_id == unique
-        adcs = dataword[channel_mask]
-        if len(adcs) < 1:
-            continue
-        vals,bins = np.histogram(adcs,bins=np.arange(257))
+       vals_dict[unique] = [] # Initialising the dictionary with arrays
+
+    for i in range(len(unique_id)):
+       unique = unique_id[i]
+       data = dataword[i]
+       vals_dict[unique].append(data) # Adding the data to the arrays
+ 
+    for unique in unique_id_set:
+        vals, bins = np.histogram(vals_dict[unique], bins = np.arange(257))
         peak_bin = np.argmax(vals)
         min_idx,max_idx = max(peak_bin-mean_trunc,0), min(peak_bin+mean_trunc,len(vals))
         ped_adc = np.average(bins[min_idx:max_idx]+0.5, weights=vals[min_idx:max_idx])
-
         config_dict[str(unique)] = dict(
-            pedestal_mv=adc2mv(ped_adc,vref_mv,vcm_mv)
+            pedestal_mv = adc2mv(ped_adc, vref_mv, vcm_mv)
             )
+        
     with open(Path(infile).name.strip('.h5')+'evd_ped.json','w') as fo:
         json.dump(config_dict, fo, sort_keys=True, indent=4)
-
+        
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='''
         A script for generating pedestal configurations used by the
