@@ -23,10 +23,10 @@ def main(infile, vdda=_default_vdda, vref_dac=_default_vref_dac,
     good_data_mask = f['packets']['packet_type'] == 0
     good_data_mask = np.logical_and(f['packets']['valid_parity'] == 1, good_data_mask)
 
-    unique_id = ((f['packets'][good_data_mask]['io_group'].astype(int)*256 \
-        + f['packets'][good_data_mask]['io_channel'].astype(int))*256 \
-        + f['packets'][good_data_mask]['chip_id'].astype(int))*64 \
-        + f['packets'][good_data_mask]['channel_id'].astype(int)
+    unique_id = (f['packets'][good_data_mask]['io_group'].astype(int)*100_000_000
+                 + f['packets'][good_data_mask]['io_channel'].astype(int)*100_000
+                 + f['packets'][good_data_mask]['chip_id'].astype(int)*100
+                 + f['packets'][good_data_mask]['channel_id'].astype(int))
     unique_id_set = set(unique_id)
 
     counter = 0
