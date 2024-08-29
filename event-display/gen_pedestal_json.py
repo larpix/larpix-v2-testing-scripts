@@ -48,7 +48,7 @@ def main(infile, vdda=_default_vdda, vref_dac=_default_vref_dac,
        data = dataword[i]
        vals_dict[unique].append(data) # Adding the data to the arrays
  
-    for unique in unique_id_set:
+    for unique in sorted(unique_id_set):
         vals, bins = np.histogram(vals_dict[unique], bins = np.arange(257))
         peak_bin = np.argmax(vals)
         min_idx,max_idx = max(peak_bin-mean_trunc,0), min(peak_bin+mean_trunc,len(vals))
