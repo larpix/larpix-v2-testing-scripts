@@ -24,9 +24,8 @@ def main(infile, vdda=_default_vdda, vref_dac=_default_vref_dac,
     good_data_mask = np.logical_and(f['packets']['valid_parity'] == 1, good_data_mask)
 
     tpc_tile_id = ((f['packets']['io_channel']-1) // 4) + 1 # runs through 1-8
-    # tiles 9-16 are connected to the "even" io groups
-    tile_offset = 8 * ((f['packets']['io_group']-1) % 2)
-    tile_id = tpc_tile_id + tile_offset
+    tile_offset = 8 * (f['packets']['io_group']-1)
+    tile_id = tpc_tile_id + tile_offset # runs through 1-64
 
     unique_id = (f['packets'][good_data_mask]['io_group'].astype(int)*100_000_000
                  + tile_id[good_data_mask].astype(int)*100_000

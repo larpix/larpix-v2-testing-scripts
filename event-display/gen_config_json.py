@@ -12,9 +12,8 @@ def key2unique(key, channel):
     io_group,io_channel,chip_id = str(key).split('-')
 
     tpc_tile_id = ((io_channel-1) // 4) + 1 # runs through 1-8
-    # tiles 9-16 are connected to the "even" io groups
-    tile_offset = 8 * ((io_group-1) % 2)
-    tile_id = tpc_tile_id + tile_offset
+    tile_offset = 8 * (io_group-1)
+    tile_id = tpc_tile_id + tile_offset # runs through 1-64
 
     return int(io_group)*100_000_000 + int(tile_id)*100_000 + int(chip_id)*100 + int(channel)
 
