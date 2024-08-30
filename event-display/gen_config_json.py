@@ -11,11 +11,11 @@ _default_vcm_dac = 71
 def key2unique(key, channel):
     io_group,io_channel,chip_id = str(key).split('-')
 
-    tpc_tile_id = ((io_channel-1) // 4) + 1 # runs through 1-8
+    tpc_tile_id = ((io_channel-1) // 4) + 1 # runs through 1-8 in 2x2
     tile_offset = 8 * (io_group-1)
-    tile_id = tpc_tile_id + tile_offset # runs through 1-64
+    tile_id = tpc_tile_id + tile_offset # runs through 1-64 in 2x2
 
-    return int(io_group)*100_000_000 + int(tile_id)*100_000 + int(chip_id)*100 + int(channel)
+    return int(io_group)*1000_000_000 + int(tile_id)*100_000 + int(chip_id)*100 + int(channel)
 
 def dac2mv(dac, max, bits=8):
     return max * dac/(2**bits)

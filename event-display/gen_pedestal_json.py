@@ -23,11 +23,11 @@ def main(infile, vdda=_default_vdda, vref_dac=_default_vref_dac,
     good_data_mask = f['packets']['packet_type'] == 0
     good_data_mask = np.logical_and(f['packets']['valid_parity'] == 1, good_data_mask)
 
-    tpc_tile_id = ((f['packets']['io_channel']-1) // 4) + 1 # runs through 1-8
+    tpc_tile_id = ((f['packets']['io_channel']-1) // 4) + 1 # runs through 1-8 in 2x2
     tile_offset = 8 * (f['packets']['io_group']-1)
-    tile_id = tpc_tile_id + tile_offset # runs through 1-64
+    tile_id = tpc_tile_id + tile_offset # runs through 1-64 in 2x2
 
-    unique_id = (f['packets'][good_data_mask]['io_group'].astype(int)*100_000_000
+    unique_id = (f['packets'][good_data_mask]['io_group'].astype(int)*1000_000_000
                  + tile_id[good_data_mask].astype(int)*100_000
                  + f['packets'][good_data_mask]['chip_id'].astype(int)*100
                  + f['packets'][good_data_mask]['channel_id'].astype(int))
