@@ -61,7 +61,7 @@ def main(infile, vdda=_default_vdda, vref_dac=_default_vref_dac,
             pedestal_mv = adc2mv(ped_adc, vref_mv, vcm_mv)
             )
         
-    with open(Path(infile).name.strip('.h5')+'evd_ped.json','w') as fo:
+    with open(Path(infile).stem+'.pedestal.json','w') as fo:
         json.dump(config_dict, fo, sort_keys=True, indent=4)
         
 if __name__ == '__main__':
