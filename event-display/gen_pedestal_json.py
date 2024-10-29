@@ -17,15 +17,17 @@ def dac2mv(dac, max, bits=8):
     return max * dac/(2**bits)
 
 def main(infile, vdda=_default_vdda, vref_dac=_default_vref_dac,
-    vcm_dac=_default_vcm_dac, mean_trunc=_default_mean_trunc, **kwargs):
+    vcm_dac=_default_vcm_dac, mean_trunc=_default_mean_trunc,
+    tiles_per_io_group=None, **kwargs):
 
     f = h5py.File(infile,'r')
     good_data_mask = f['packets']['packet_type'] == 0
     good_data_mask = np.logical_and(f['packets']['valid_parity'] == 1, good_data_mask)
 
-    tpc_tile_id = ((f['packets']['io_channel']-1) // 4) + 1 # runs through 1-8 in 2x2
-    tile_offset = 8 * (f['packets']['io_group']-1)
-    tile_id = tpc_tile_id + tile_offset # runs through 1-64 in 2x2
+    # iog_tile_id runs through 1-8 in 2x2, 1-10 in FSD
+    iog_tile_id = ((f['packets']['io_channel']-1) // 4) + 1
+    tile_offset = tiles_per_io_group * (f['packets']['io_group']-1)
+    tile_id = iog_tile_id + tile_offset # runs through 1-64 in 2x2, 1-40 in FSD
 
     unique_id = (f['packets'][good_data_mask]['io_group'].astype(int)*1000_000_000
                  + tile_id[good_data_mask].astype(int)*100_000
@@ -73,6 +75,8 @@ if __name__ == '__main__':
         values and store them in pedestal config file.'''
         )
     parser.add_argument('--infile','-i',required=True,type=str)
+    parser.add_argument('--tiles-per-io-group', type=int, required=True,
+                        help='e.g. 8 for 2x2, 10 for FSD')
     parser.add_argument('--vdda',default=_default_vdda,type=float,help='''default=%(default)s mV''')
     parser.add_argument('--vref_dac',default=_default_vref_dac,type=int,help='''default=%(default)s''')
     parser.add_argument('--vcm_dac',default=_default_vcm_dac,type=int,help='''default=%(default)s''')
